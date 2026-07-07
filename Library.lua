@@ -677,14 +677,15 @@
 						Name = "" 
 					})
 					
-					items.main_holder = library:create("Frame", {
+					items.main_holder = library:create("CanvasGroup", {
 						Parent = items.sgui,
 						Name = "",
 						AnchorPoint = vec2(cfg.anchor_point.X, cfg.anchor_point.Y),
 						Position = cfg.position,
-						Active = true, 
+						Active = true,
 						BorderColor3 = rgb(0, 0, 0),
 						Size = cfg.size,
+						GroupTransparency = 0,
 						BorderSizePixel = 0,
 						BackgroundColor3 = themes.preset.outline
 					})
@@ -722,9 +723,10 @@
 						if bool then
 							items.sgui.Enabled = true
 							items.main_holder.Size = shrunk_size
-							library:tween(items.main_holder, {Size = cfg.size})
+							items.main_holder.GroupTransparency = 1
+							library:tween(items.main_holder, {Size = cfg.size, GroupTransparency = 0})
 						else
-							library:tween(items.main_holder, {Size = shrunk_size})
+							library:tween(items.main_holder, {Size = shrunk_size, GroupTransparency = 1})
 							task.delay(0.22, function()
 								if not cfg.open then items.sgui.Enabled = false end
 							end)
@@ -1907,9 +1909,12 @@
 					library:update_theme("glow", color)
 				end, flag = "Glow"})
 				section:slider({name = "Blur Size", flag = "Blur Size", min = 0, max = 56, default = 15, interval = 1, callback = function(int)
-					if window.opened then 
+					if window.opened then
 						blur.Size = int
 					end
+				end})
+				section:dropdown({name = "Background FX", items = {"None", "Snow", "Rain", "Stars"}, default = "Snow", flag = "background_fx", callback = function(text)
+					window.set_background_fx(text)
 				end})
 				local section = column:section({name = "Other"})
 				section:label({name = "UI Bind"})
@@ -2019,9 +2024,6 @@
 
 						blur:Destroy()
 					end})
-					section:dropdown({name = "Background FX", items = {"None", "Snow", "Rain", "Stars"}, default = "Snow", flag = "background_fx", callback = function(text)
-						window.set_background_fx(text)
-					end})
 			--
 
 			-- esp preview
@@ -2061,7 +2063,7 @@
 					anchor_point = vec2(0, 0),
 					size = dim2(0, 300, 0, 210),
 					position = dim2(0, holder.items.main_holder.AbsolutePosition.X, 0, holder.items.main_holder.AbsolutePosition.Y + holder.items.main_holder.AbsoluteSize.Y + 2),
-					image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+					image = "rbxassetid://105199726008012" -- reuses the Configurations icon; swap in a real note icon id whenever you have one
 				})
 
 				local music_items = music_holder.items
@@ -2215,13 +2217,26 @@
 		end
 
 		function library:esp_preview(properties)
-			local cfg = {items = {}, rotation = 0; objects = {}; player = properties.player or lp}
+			local cfg = {items = {}, rotation = 0; objects = {}; player = properties.player or lp; dragging = false; frame_offset_y = 0; distance = 6}
+
+			local function compute_frame(char)
+				local root = char.PrimaryPart or char:FindFirstChild("HumanoidRootPart")
+				if not root then return 0, 6 end
+
+				local ok, bbox_cf, bbox_size = pcall(function() return char:GetBoundingBox() end)
+				if not ok then return 0, 6 end
+
+				local offset_y = bbox_cf.Position.Y - root.Position.Y
+				local dist = clamp(bbox_size.Y * 1.3, 6, 14)
+				return offset_y, dist
+			end
 
 			cfg.player.Character.Archivable = true
 			local character = cfg.player.Character:Clone()
 			character.Animate:Destroy()
+			cfg.frame_offset_y, cfg.distance = compute_frame(character)
 
-			local items = cfg.items; do 
+			local items = cfg.items; do
 				items.viewportframe = library:create( "ViewportFrame" , {
 					Parent = self.holder;
 					BackgroundTransparency = 1;
@@ -2232,7 +2247,7 @@
 					BorderSizePixel = 0;
 					BackgroundColor3 = rgb(255, 255, 255)
 				});
-				
+
 				items.camera = library:create( "Camera" , {
 					FieldOfView = 70.00022888183594;
 					CameraType = Enum.CameraType.Track;
@@ -2240,19 +2255,43 @@
 					CFrame = cfr(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1);
 					Parent = ws;
 					Name = "\0"
-				}); 
+				});
 
 				items.viewportframe.CurrentCamera = items.camera -- sick
 				character.Parent = items.viewportframe
 
 				items.camera.CameraSubject = character
 
+				-- drag to rotate (mouse or touch), pauses auto-spin while held
+				local drag_start_x = 0
+				items.viewportframe.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						cfg.dragging = true
+						drag_start_x = input.Position.X
+					end
+				end)
+
+				items.viewportframe.InputChanged:Connect(function(input)
+					if cfg.dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+						cfg.rotation = cfg.rotation - (input.Position.X - drag_start_x) * 0.5
+						drag_start_x = input.Position.X
+					end
+				end)
+
+				items.viewportframe.InputEnded:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						cfg.dragging = false
+					end
+				end)
+
 				library:connection(run.RenderStepped, function()
 					task.wait()
-					cfg.rotation += 0.5
-					character:SetPrimaryPartCFrame(cfr(Vector3.new(0, 1, -6)) * angle(0, math.rad(cfg.rotation), 0))
+					if not cfg.dragging then
+						cfg.rotation += 0.5
+					end
+					character:SetPrimaryPartCFrame(cfr(Vector3.new(0, 1 - cfg.frame_offset_y, -cfg.distance)) * angle(0, math.rad(cfg.rotation), 0))
 				end)
-			end 
+			end
 
 			local objects = cfg.objects; do 
 				objects[ "holder" ] = library:create( "Frame" , {
@@ -2640,6 +2679,7 @@
 				character.Parent = items.viewportframe
 				items.camera.CameraSubject = character
 				objects["name"].Text = string.format("%s (@%s)", new_player.DisplayName, new_player.Name)
+				cfg.frame_offset_y, cfg.distance = compute_frame(character)
 
 				old_character:Destroy()
 			end
@@ -3000,13 +3040,14 @@
 			-- 
 
 			-- section instances 
-				local section_holder = library:create("Frame", {
+				local section_holder = library:create("CanvasGroup", {
 					Parent = library.section_holder,
 					BackgroundTransparency = 1,
 					Name = "\0",
 					BorderColor3 = rgb(0, 0, 0),
 					Size = dim2(1, 0, 1, 0),
 					BorderSizePixel = 0,
+					GroupTransparency = 1,
 					Visible = false,
 					BackgroundColor3 = rgb(255, 255, 255)
 				})
@@ -3023,27 +3064,34 @@
 			-- 
 
 			function cfg.open_tab()
-				if library.current_tab and library.current_tab[1] ~= background then 
+				if library.current_tab and library.current_tab[1] ~= background then
 					local button = library.current_tab[1]
-					button.Size = dim2(1, -2, 1, -1)
+					local closing_holder = library.current_tab[2]
+
+					library:tween(button, {Size = dim2(1, -2, 1, -1)})
 					button:FindFirstChildOfClass("UIGradient").Rotation = 90
 					button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.text
-						
-					library.current_tab[2].Visible = false
-					
+
+					library:tween(closing_holder, {GroupTransparency = 1})
+					task.delay(0.18, function()
+						closing_holder.Visible = false
+					end)
+
 					library.current_tab = nil
 				end
-				
+
 				library.current_tab = {
 					background, section_holder
 				}
-				
-				local button = library.current_tab[1] 
-				button.Size = dim2(1, -2, 1, 0) -- ENABLED
-				button:FindFirstChildOfClass("UIGradient").Rotation = -90
-				button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.accent 
 
-				library.current_tab[2].Visible = true 
+				local button = library.current_tab[1]
+				library:tween(button, {Size = dim2(1, -2, 1, 0)}) -- ENABLED
+				button:FindFirstChildOfClass("UIGradient").Rotation = -90
+				button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.accent
+
+				section_holder.Visible = true
+				section_holder.GroupTransparency = 1
+				library:tween(section_holder, {GroupTransparency = 0})
 
 				if library.current_element_open and library.current_element_open ~= cfg then 
 					library.current_element_open.set_visible(false)
@@ -3632,7 +3680,12 @@
 
 				cfg.value = math.clamp(library:round(value, cfg.intervals), cfg.min, cfg.max)
 
-				fill.Size = dim2((cfg.value - cfg.min) / (cfg.max - cfg.min), 0, 1, 0)
+				local fill_size = dim2((cfg.value - cfg.min) / (cfg.max - cfg.min), 0, 1, 0)
+				if cfg.dragging then
+					fill.Size = fill_size
+				else
+					library:tween(fill, {Size = fill_size})
+				end
 				slidertext.Text = tostring(cfg.value) .. cfg.suffix .. "/" .. tostring(cfg.max) .. cfg.suffix
 				flags[cfg.flag] = cfg.value
 
@@ -3951,17 +4004,18 @@
 			-- 
 
 			-- colorpicker instances
-				local colorpicker_holder = library:create("Frame", {
+				local colorpicker_holder = library:create("CanvasGroup", {
 					Parent = sgui,
 					Name = "colorpicker",
 					Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17),
 					BorderColor3 = rgb(0, 0, 0),
 					Size = dim2(0, 190, 0, 210),
+					GroupTransparency = 1,
 					BorderSizePixel = 0,
 					BackgroundColor3 = themes.preset.outline,
 					Visible = false,
 					ZIndex = 1
-				}) library:apply_theme(colorpicker_holder, "outline", "BackgroundColor3") 
+				}) library:apply_theme(colorpicker_holder, "outline", "BackgroundColor3")
 
 				library:make_resizable(colorpicker_holder)
 				
@@ -4340,18 +4394,24 @@
 			-- 
 				
 			function cfg.set_visible(bool)
-				colorpicker_holder.Visible = bool
-
-				if bool then 
-					if library.current_element_open and library.current_element_open ~= cfg then 
+				if bool then
+					if library.current_element_open and library.current_element_open ~= cfg then
 						library.current_element_open.set_visible(false)
-						library.current_element_open.open = false 
+						library.current_element_open.open = false
 					end
 
 					library.current_element_open = cfg
 					colorpicker_holder.Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17)
+					colorpicker_holder.Visible = true
+					colorpicker_holder.GroupTransparency = 1
+					library:tween(colorpicker_holder, {GroupTransparency = 0})
+				else
+					library:tween(colorpicker_holder, {GroupTransparency = 1})
+					task.delay(0.22, function()
+						if not cfg.open then colorpicker_holder.Visible = false end
+					end)
 				end
-			end 
+			end
 
 			colorpicker_button.MouseButton1Click:Connect(function()		
 				cfg.open = not cfg.open
@@ -4471,9 +4531,10 @@
 				name = options.name or nil, 
 				ignore_key = options.ignore or false, 
 
-				key = options.key or nil, 
+				key = options.key or nil,
 				mode = options.mode or "toggle",
-				active = options.default or false, 
+				active = options.default or false,
+				list_mode = options.list_mode or "always", -- "always" or "active_only"
 
 				hold_instances = {},
 			}
@@ -4488,9 +4549,10 @@
 					FontFace = library.font,
 					TextColor3 = themes.preset.text,
 					BorderColor3 = rgb(0, 0, 0),
-					Text = "[ Hold ]  Fly - X",
+					Text = "[ Toggle ] " .. tostring(options.name) .. " - none",
 					Size = dim2(1, -5, 0, 18),
-					Visible = false, 
+					Visible = (options.list_mode or "always") == "always",
+					TextTransparency = 0.5,
 					Position = dim2(0, 5, 0, -1),
 					BorderSizePixel = 0,
 					BackgroundTransparency = 1,
@@ -4780,23 +4842,21 @@
 						active = cfg.active
 					}
 					
-					if cfg.name then 
-						KEYBIND_ELEMENT.Visible = cfg.active
+					if cfg.name then
+						KEYBIND_ELEMENT.Visible = (cfg.list_mode == "always") or cfg.active
 
 						library:tween(KEYBIND_ELEMENT, {
-							TextTransparency = cfg.active and 0 or 1, 
-						}) 
+							TextTransparency = cfg.active and 0 or 0.5,
+						})
 
 						library:tween(KEYBIND_ELEMENT:FindFirstChildOfClass("UIStroke"), {
-							Transparency = cfg.active and 0 or 1, 
-						}) 
-						
-						local text = tostring(cfg.key) ~= "Enums" and (keys[cfg.key] or tostring(cfg.key):gsub("Enum.", "")) or nil
-						local __text = text and (tostring(text):gsub("KeyCode.", ""):gsub("UserInputType.", ""))
+							Transparency = cfg.active and 0 or 0.5,
+						})
 
-						if cfg.name then 
-							KEYBIND_ELEMENT.Text = "[ " .. string.upper(string.sub(cfg.mode, 1, 1)) .. string.sub(cfg.mode, 2) .. " ] " .. cfg.name .. " - " .. __text
-						end
+						local text = tostring(cfg.key) ~= "Enums" and (keys[cfg.key] or tostring(cfg.key):gsub("Enum.", "")) or nil
+						local __text = (text and tostring(text):gsub("KeyCode.", ""):gsub("UserInputType.", "")) or "none"
+
+						KEYBIND_ELEMENT.Text = "[ " .. string.upper(string.sub(cfg.mode, 1, 1)) .. string.sub(cfg.mode, 2) .. " ] " .. cfg.name .. " - " .. __text .. (cfg.active and " (on)" or " (off)")
 					end
 				end
 
@@ -4872,14 +4932,21 @@
 				end)
 		
 				cfg.set({mode = cfg.mode, active = cfg.active, key = cfg.key})
-		
+
 				library.config_flags[cfg.flag] = cfg.set
-			-- 
-			
+			--
+
 			library.config_flags[cfg.flag] = cfg.set
 
-			return setmetatable(cfg, library) 
-		end 
+			function cfg.set_list_mode(mode)
+				cfg.list_mode = mode == "Only When Active" and "active_only" or "always"
+				if cfg.name then
+					KEYBIND_ELEMENT.Visible = (cfg.list_mode == "always") or cfg.active
+				end
+			end
+
+			return setmetatable(cfg, library)
+		end
 
 		function library:dropdown(options)
 			local parent = self.holder 
@@ -5112,11 +5179,12 @@
 			--
 
 			-- dropdown holder
-				local dropdown_holder = library:create("Frame", {
+				local dropdown_holder = library:create("CanvasGroup", {
 					Parent = sgui,
 					BorderColor3 = rgb(0, 0, 0),
 					Name = "dropdown_holder",
 					BackgroundTransparency = 1,
+					GroupTransparency = 1,
 					Position = dim2(0, dropdown.AbsolutePosition.X + 1, 0, dropdown.AbsolutePosition.Y + 22),
 					Size = dim2(0, dropdown.AbsoluteSize.X, 0, cfg.scrolling and 180 or 0),
 					BorderSizePixel = 0,
@@ -5231,22 +5299,28 @@
 				end 
 			end 
 
-			function cfg.set_visible(bool) 
+			function cfg.set_visible(bool)
 				library.current_element_open = cfg.ignore or cfg
-
-				dropdown_holder.Visible = bool
 
 				plus.Text = bool and "-" or "+"
 				plus.TextSize = bool and 12 or 8
 
-				if bool then 
-					if library.current_element_open and library.current_element_open ~= cfg and not cfg.ignore then 
+				if bool then
+					if library.current_element_open and library.current_element_open ~= cfg and not cfg.ignore then
 						library.current_element_open.set_visible(false)
-						library.current_element_open.open = false 
+						library.current_element_open.open = false
 					end
 
 					dropdown_holder.Size = dim2(0, dropdown.AbsoluteSize.X, 0, dropdown_holder.Size.Y.Offset)
-					dropdown_holder.Position = dim2(0, dropdown.AbsolutePosition.X + 1, 0, dropdown.AbsolutePosition.Y + 22)                    
+					dropdown_holder.Position = dim2(0, dropdown.AbsolutePosition.X + 1, 0, dropdown.AbsolutePosition.Y + 22)
+					dropdown_holder.Visible = true
+					dropdown_holder.GroupTransparency = 1
+					library:tween(dropdown_holder, {GroupTransparency = 0})
+				else
+					library:tween(dropdown_holder, {GroupTransparency = 1})
+					task.delay(0.22, function()
+						if not cfg.open then dropdown_holder.Visible = false end
+					end)
 				end
 			end
 

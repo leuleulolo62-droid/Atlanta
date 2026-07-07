@@ -14,8 +14,12 @@ local players_service = game:GetService("Players")
 	-- Aiming
 		local column =  Aiming:column() 
 			local selec, lock, assist  = column:multi_section({names = {"Selection", "Lock"}})
-				selec:toggle({name = "Enabled", flag = "target_selected", tooltip = "Manages selection of the target (both lock and aim assist)"})
+				local aiming_keybind = selec:toggle({name = "Enabled", flag = "target_selected", tooltip = "Manages selection of the target (both lock and aim assist)"})
 				:keybind({name = "Aiming", flag = "target_selected_bind"})
+
+				selec:dropdown({name = "Aiming Keybind List Display", items = {"Always", "Only When Active"}, default = "Always", flag = "target_selected_bind_list_mode", callback = function(text)
+					aiming_keybind.set_list_mode(text)
+				end})
 				selec:toggle({name = "Auto Select", flag = "auto_select", tooltip = "Selects targets for you. (Edit the delay slider if you want more fps.)"})
 				selec:toggle({name = "Only Select Enemies", flag = "enemy_priority", tooltip = "Only targets users under the priority enemy (through the playerlist)"})
 				selec:dropdown({name = "Origin", flag = "distance_priority", items = {"Mouse", "Distance"}, default = "Mouse", tooltip = "Selects targets based on the origin"})
