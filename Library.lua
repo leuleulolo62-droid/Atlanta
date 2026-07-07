@@ -1456,14 +1456,13 @@
 					BorderColor3 = rgb(0, 0, 0),
 					AnchorPoint = vec2(0.5, 0),
 					Position = dim2(0.5, 0, 0, 20),
-					Size = dim2(0, 157, 0, 39),
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = dim2(0, 0, 0, 39),
 					BorderSizePixel = 0,
 					BackgroundColor3 = themes.preset.outline
-				}); 
+				});
 
-				library:apply_theme(dock_outline, "outline", "BackgroundColor3"); 
-				dock_outline.Position = dim2(0, dock_outline.AbsolutePosition.X, 0, dock_outline.AbsolutePosition.Y); 
-				dock_outline.AnchorPoint = vec2(0, 0); 
+				library:apply_theme(dock_outline, "outline", "BackgroundColor3");
 				library:draggify(dock_outline);
 
 				local dock_inline = library:create("Frame", {
@@ -1471,20 +1470,22 @@
 					Name = "",
 					Position = dim2(0, 1, 0, 1),
 					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = dim2(0, 0, 1, -2),
 					BorderSizePixel = 0,
 					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(dock_inline, "inline", "BackgroundColor3") 
-				
+				}) library:apply_theme(dock_inline, "inline", "BackgroundColor3")
+
 				local dock_holder = library:create("Frame", {
 					Parent = dock_inline,
 					Name = "",
-					Size = dim2(1, -2, 1, -2),
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = dim2(0, 0, 1, -2),
 					Position = dim2(0, 1, 0, 1),
 					BorderColor3 = themes.preset.outline,
 					BorderSizePixel = 0,
 					BackgroundColor3 = rgb(255, 255, 255)
-				}) library:apply_theme(dock_holder, "outline", "BackgroundColor3") 
+				}) library:apply_theme(dock_holder, "outline", "BackgroundColor3")
 				
 				local accent = library:create("Frame", {
 					Parent = dock_holder,
@@ -1509,7 +1510,8 @@
 					Parent = dock_holder,
 					Name = "",
 					BackgroundTransparency = 1,
-					Size = dim2(1, 0, 1, 0),
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = dim2(0, 0, 1, 0),
 					BorderColor3 = rgb(0, 0, 0),
 					BorderSizePixel = 0,
 					BackgroundColor3 = rgb(255, 255, 255)
@@ -2063,13 +2065,55 @@
 					anchor_point = vec2(0, 0),
 					size = dim2(0, 300, 0, 210),
 					position = dim2(0, holder.items.main_holder.AbsolutePosition.X, 0, holder.items.main_holder.AbsolutePosition.Y + holder.items.main_holder.AbsoluteSize.Y + 2),
-					image = "rbxassetid://105199726008012" -- reuses the Configurations icon; swap in a real note icon id whenever you have one
+					image = "" -- no asset dependency, a vector note icon is drawn below instead
 				})
+
+				-- draw a small quarter-note icon (no image asset needed, so it always renders correctly)
+				do
+					music_holder.items.Icon.Visible = false
+					local icon_parent = music_holder.items.Icon.Parent
+
+					local note_head = library:create("Frame", {
+						Parent = icon_parent,
+						Name = "",
+						AnchorPoint = vec2(0, 1),
+						Position = dim2(0.1, 0, 1, 0),
+						Size = dim2(0.55, 0, 0.4, 0),
+						BorderSizePixel = 0,
+						BackgroundColor3 = themes.preset.accent
+					}) library:apply_theme(note_head, "accent", "BackgroundColor3")
+					library:create("UICorner", {Parent = note_head, CornerRadius = dim(1, 0)})
+
+					local note_stem = library:create("Frame", {
+						Parent = icon_parent,
+						Name = "",
+						AnchorPoint = vec2(1, 1),
+						Position = dim2(0.65, 0, 1, 0),
+						Size = dim2(0, 2, 0.95, 0),
+						BorderSizePixel = 0,
+						BackgroundColor3 = themes.preset.accent
+					}) library:apply_theme(note_stem, "accent", "BackgroundColor3")
+
+					local note_flag = library:create("Frame", {
+						Parent = icon_parent,
+						Name = "",
+						AnchorPoint = vec2(0, 1),
+						Position = dim2(0.65, 0, 0.3, 0),
+						Size = dim2(0.3, 0, 0, 2),
+						Rotation = 35,
+						BorderSizePixel = 0,
+						BackgroundColor3 = themes.preset.accent
+					}) library:apply_theme(note_flag, "accent", "BackgroundColor3")
+				end
 
 				local music_items = music_holder.items
 				local music_column = setmetatable(music_items, library):column()
 				window.music_section = music_column:section({name = "Music"})
 			--
+
+			-- lock the dock's screen position now that every icon has been added and it has its final width
+			dock_outline.Position = dim2(0, dock_outline.AbsolutePosition.X, 0, dock_outline.AbsolutePosition.Y)
+			dock_outline.AnchorPoint = vec2(0, 0)
 
 			return setmetatable(window, library)
 		end
