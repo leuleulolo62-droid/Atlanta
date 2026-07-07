@@ -83,6 +83,15 @@
 		notifications = {},
 		playerlist_data = {},
 		searchable_sections = {},
+		playerlist_actions = {
+			{name = "Teleport To", callback = function(player_obj)
+				local target_root = player_obj.Character and player_obj.Character:FindFirstChild("HumanoidRootPart")
+				local my_root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+				if target_root and my_root then
+					my_root.CFrame = target_root.CFrame + vec3(0, 3, 0)
+				end
+			end}
+		},
 
 		current_tab, 
 		current_element_open, 
@@ -707,8 +716,25 @@
 						Parent = Close
 					});         
 					
+					local shrunk_size = dim2(cfg.size.X.Scale, cfg.size.X.Offset * 0.92, cfg.size.Y.Scale, cfg.size.Y.Offset * 0.92)
+
+					function cfg.set_open(bool)
+						if bool then
+							items.sgui.Enabled = true
+							items.main_holder.Size = shrunk_size
+							library:tween(items.main_holder, {Size = cfg.size})
+						else
+							library:tween(items.main_holder, {Size = shrunk_size})
+							task.delay(0.22, function()
+								if not cfg.open then items.sgui.Enabled = false end
+							end)
+						end
+
+						cfg.open = bool
+					end
+
 					Close.MouseButton1Click:Connect(function()
-						items.sgui.Enabled = false;
+						cfg.set_open(false)
 					end)
 
 					--library:apply_theme(main_holder, "outline", "BackgroundColor3") 
@@ -923,7 +949,7 @@
 			end)
 
 			items.button.MouseButton1Click:Connect(function()
-				items.sgui.Enabled = not items.sgui.Enabled
+				cfg.set_open(not items.sgui.Enabled)
 			end)
 			
 			return setmetatable(cfg, library)
@@ -1241,8 +1267,8 @@
 				Name = ""
 			})
 
-			-- snow background (visible only while menu is open)
-			local snow_gui = library:create("ScreenGui", {
+			-- background fx (visible only while menu is open): None / Snow / Rain / Stars
+			local fx_gui = library:create("ScreenGui", {
 				Parent = gethui(),
 				Name = "",
 				DisplayOrder = 999998,
@@ -1250,70 +1276,134 @@
 				Enabled = false
 			})
 
-			local snow_holder = library:create("Frame", {
-				Parent = snow_gui,
-				Name = "",
-				Size = dim2(1, 0, 1, 0),
-				BackgroundTransparency = 1,
-				BorderSizePixel = 0,
-				ZIndex = 1
-			})
+			local function build_particle_holder(count, particle_builder)
+				local holder = library:create("Frame", {
+					Parent = fx_gui,
+					Name = "",
+					Visible = false,
+					Size = dim2(1, 0, 1, 0),
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					ZIndex = 1
+				})
 
-			local snow_flakes = {}
-			for i = 1, 50 do
-				local flake_size = 2 + random() * 2
-				local flake = library:create("Frame", {
-					Parent = snow_holder,
+				local particles = {}
+				for i = 1, count do
+					insert(particles, particle_builder(holder))
+				end
+
+				return holder, particles
+			end
+
+			local snow_holder, snow_particles = build_particle_holder(50, function(parent)
+				local size = 2 + random() * 2
+				local instance = library:create("Frame", {
+					Parent = parent,
 					Name = "",
 					AnchorPoint = vec2(0.5, 0.5),
-					Size = dim2(0, flake_size, 0, flake_size),
+					Size = dim2(0, size, 0, size),
 					Position = dim2(random(), 0, random(), 0),
 					BackgroundColor3 = rgb(255, 255, 255),
 					BackgroundTransparency = 0.15 + random() * 0.35,
 					BorderSizePixel = 0,
 					ZIndex = 1
 				})
+				library:create("UICorner", {Parent = instance, CornerRadius = dim(1, 0)})
 
-				library:create("UICorner", {
-					Parent = flake,
-					CornerRadius = dim(1, 0)
+				return {instance = instance, x = random(), y = random(), speed = 20 + random() * 30, drift = (random() - 0.5) * 0.03, sway = random() * pi * 2}
+			end)
+
+			local rain_holder, rain_particles = build_particle_holder(60, function(parent)
+				local instance = library:create("Frame", {
+					Parent = parent,
+					Name = "",
+					AnchorPoint = vec2(0.5, 0.5),
+					Size = dim2(0, 1, 0, 10 + random() * 8),
+					Position = dim2(random(), 0, random(), 0),
+					BackgroundColor3 = rgb(180, 200, 220),
+					BackgroundTransparency = 0.3 + random() * 0.3,
+					BorderSizePixel = 0,
+					ZIndex = 1
 				})
 
-				insert(snow_flakes, {
-					instance = flake,
-					x = flake.Position.X.Scale,
-					y = random(),
-					speed = 20 + random() * 30,
-					drift = (random() - 0.5) * 0.03,
-					sway = random() * pi * 2
+				return {instance = instance, x = random(), y = random(), speed = 90 + random() * 60}
+			end)
+
+			local star_holder, star_particles = build_particle_holder(70, function(parent)
+				local size = 1 + random()
+				local instance = library:create("Frame", {
+					Parent = parent,
+					Name = "",
+					AnchorPoint = vec2(0.5, 0.5),
+					Size = dim2(0, size, 0, size),
+					Position = dim2(random(), 0, random(), 0),
+					BackgroundColor3 = rgb(255, 255, 255),
+					BackgroundTransparency = 0.2,
+					BorderSizePixel = 0,
+					ZIndex = 1
 				})
+				library:create("UICorner", {Parent = instance, CornerRadius = dim(1, 0)})
+
+				return {instance = instance, x = random(), y = random(), twinkle = random() * pi * 2, twinkle_speed = 1 + random() * 2}
+			end)
+
+			local fx_presets = {
+				Snow = {holder = snow_holder, particles = snow_particles},
+				Rain = {holder = rain_holder, particles = rain_particles},
+				Stars = {holder = star_holder, particles = star_particles}
+			}
+
+			local active_fx = "Snow"
+			snow_holder.Visible = true
+
+			local function set_background_fx(kind)
+				if not fx_presets[kind] and kind ~= "None" then return end
+
+				for name, preset in fx_presets do
+					preset.holder.Visible = (name == kind)
+				end
+
+				active_fx = kind
 			end
+			window.set_background_fx = set_background_fx
 
-			local snow_connection;
-			local function set_snow_enabled(bool)
-				snow_gui.Enabled = bool
+			local fx_connection;
+			local function set_fx_enabled(bool)
+				fx_gui.Enabled = bool
 
-				if bool and not snow_connection then
-					snow_connection = library:connection(run.Heartbeat, function(dt)
-						local viewport_y = camera.ViewportSize.Y
+				if bool and not fx_connection then
+					fx_connection = library:connection(run.Heartbeat, function(dt)
+						if active_fx == "None" then return end
+
+						local viewport_y = ws.CurrentCamera and ws.CurrentCamera.ViewportSize.Y or 1080
 						if viewport_y <= 0 then viewport_y = 1080 end
 
-						for _, flake in snow_flakes do
-							flake.y = flake.y + (flake.speed * dt / viewport_y)
-							flake.sway = flake.sway + dt
-
-							if flake.y > 1.05 then
-								flake.y = -0.05
-								flake.x = random()
+						if active_fx == "Snow" then
+							for _, flake in snow_particles do
+								flake.y = flake.y + (flake.speed * dt / viewport_y)
+								flake.sway = flake.sway + dt
+								if flake.y > 1.05 then flake.y = -0.05; flake.x = random() end
+								flake.instance.Position = dim2(flake.x + sin(flake.sway) * flake.drift, 0, flake.y, 0)
 							end
-
-							local sway_offset = sin(flake.sway) * flake.drift
-							flake.instance.Position = dim2(flake.x + sway_offset, 0, flake.y, 0)
+						elseif active_fx == "Rain" then
+							for _, drop in rain_particles do
+								drop.y = drop.y + (drop.speed * dt / viewport_y)
+								if drop.y > 1.05 then drop.y = -0.05; drop.x = random() end
+								drop.instance.Position = dim2(drop.x, 0, drop.y, 0)
+							end
+						elseif active_fx == "Stars" then
+							for _, star in star_particles do
+								star.y = star.y + (4 * dt / viewport_y)
+								star.twinkle = star.twinkle + dt * star.twinkle_speed
+								if star.y > 1.05 then star.y = -0.05; star.x = random() end
+								star.instance.Position = dim2(star.x, 0, star.y, 0)
+								star.instance.BackgroundTransparency = 0.2 + (sin(star.twinkle) * 0.5 + 0.5) * 0.6
+							end
 						end
 					end)
-				elseif not bool and snow_connection then
-					snow_connection:Disconnect()
-					snow_connection = nil
+				elseif not bool and fx_connection then
+					fx_connection:Disconnect()
+					fx_connection = nil
 				end
 			end
 
@@ -1343,7 +1433,7 @@
 				tooltip_sgui.Enabled = true
 				library.cache.Enabled = false
 
-				set_snow_enabled(bool)
+				set_fx_enabled(bool)
 
 				for _,tooltip in tooltip_sgui:GetChildren() do
 					tooltip.Visible = false;
@@ -1929,8 +2019,11 @@
 
 						blur:Destroy()
 					end})
-			-- 
-					
+					section:dropdown({name = "Background FX", items = {"None", "Snow", "Rain", "Stars"}, default = "Snow", flag = "background_fx", callback = function(text)
+						window.set_background_fx(text)
+					end})
+			--
+
 			-- esp preview
 				local holder = library:panel({
 					name = "ESP Preview", 
@@ -1960,10 +2053,21 @@
 				local column = setmetatable(items, library):column() 
 				local section = column:section({name = "Playerlist"})
 				local playerlist = section:playerlist({})
-				section:dropdown({name = "Priority", items = {"Enemy", "Priority", "Neutral", "Friendly"}, default = "Neutral", flag = "PLAYERLIST_DROPDOWN", callback = function(text)
-					library.prioritize(text)
-				end})
-			--  
+			--
+
+			-- music player (its own floating panel + dock icon, like Configurations/Playerlist)
+				local music_holder = library:panel({
+					name = "Music",
+					anchor_point = vec2(0, 0),
+					size = dim2(0, 300, 0, 210),
+					position = dim2(0, holder.items.main_holder.AbsolutePosition.X, 0, holder.items.main_holder.AbsolutePosition.Y + holder.items.main_holder.AbsoluteSize.Y + 2),
+					image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+				})
+
+				local music_items = music_holder.items
+				local music_column = setmetatable(music_items, library):column()
+				window.music_section = music_column:section({name = "Music"})
+			--
 
 			return setmetatable(window, library)
 		end
@@ -2059,17 +2163,36 @@
 				}
 			})
 			
+			-- base text (from change_text) and the FPS/Ping suffix are tracked separately
+			-- and composed together, so this loop never fights a caller's own change_text loop
+			cfg.base_text = cfg.default
+			cfg.stats_suffix = ""
+
+			local function repaint()
+				text.Text = "  ".. cfg.base_text .. cfg.stats_suffix .."  "
+			end
+
 			function cfg.change_text(input)
-				text.Text = "  ".. input .."  "
-			end 
+				cfg.base_text = input
+				repaint()
+			end
 
 			function cfg.set_visible(bool)
 				watermark_outline.Visible = bool
 			end
 
-			-- FPS + ping suffix, refreshed twice a second
+			function cfg.set_stats_visible(bool)
+				cfg.stats_suffix = ""
+				repaint()
+				cfg.stats_enabled = bool
+			end
+
+			-- FPS + ping suffix, refreshed twice a second (opt-in via options.stats)
+			cfg.stats_enabled = options.stats or false
 			local stats_elapsed = 0
 			library:connection(run.Heartbeat, function(dt)
+				if not cfg.stats_enabled then return end
+
 				stats_elapsed = stats_elapsed + dt
 				if stats_elapsed < 0.5 then return end
 				stats_elapsed = 0
@@ -2081,7 +2204,8 @@
 				end)
 				if ping_ok then ping = round(ping_result) end
 
-				cfg.change_text(string.format("%s | FPS: %d | Ping: %dms", cfg.default, fps, ping))
+				cfg.stats_suffix = string.format(" | FPS: %d | Ping: %dms", fps, ping)
+				repaint()
 			end)
 
 			cfg.change_text(cfg.default)
@@ -6039,10 +6163,62 @@
 				})
 			-- 
 
-			function cfg.create_player(player) 
+			local function open_player_actions(player_obj)
+				if library.player_actions_menu then
+					library.player_actions_menu:Destroy()
+					library.player_actions_menu = nil
+				end
+
+				local menu = library:create("Frame", {
+					Parent = sgui,
+					Name = "",
+					Position = dim2(0, mouse.X, 0, mouse.Y),
+					Size = dim2(0, 140, 0, 0),
+					AutomaticSize = Enum.AutomaticSize.Y,
+					BorderColor3 = rgb(0, 0, 0),
+					ZIndex = 50,
+					BackgroundColor3 = themes.preset.outline
+				}) library:apply_theme(menu, "outline", "BackgroundColor3")
+
+				library:create("UIListLayout", {
+					Parent = menu,
+					SortOrder = Enum.SortOrder.LayoutOrder
+				})
+
+				for _, action in library.playerlist_actions do
+					local action_button = library:create("TextButton", {
+						Parent = menu,
+						Name = "",
+						FontFace = library.font,
+						TextColor3 = themes.preset.text,
+						BorderColor3 = rgb(0, 0, 0),
+						Text = "  " .. action.name,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						Size = dim2(1, 0, 0, 22),
+						BorderSizePixel = 0,
+						ZIndex = 50,
+						TextSize = 12,
+						BackgroundColor3 = themes.preset.inline
+					}) library:apply_theme(action_button, "inline", "BackgroundColor3")
+
+					action_button.MouseButton1Click:Connect(function()
+						action.callback(player_obj)
+						if library.player_actions_menu then
+							library.player_actions_menu:Destroy()
+							library.player_actions_menu = nil
+						end
+					end)
+				end
+
+				library.player_actions_menu = menu
+			end
+
+			function cfg.create_player(player)
 				library.playerlist_data[tostring(player)] = {}
 				local path = library.playerlist_data[tostring(player)]
-				
+				local player_obj = typeof(player) == "Instance" and player or players:FindFirstChild(tostring(player))
+
+
 				local TextButton = library:create("TextButton", {
 					Parent = ScrollingFrame,
 					Name = "",
@@ -6101,13 +6277,16 @@
 				--     BackgroundColor3 = themes.preset.outline
 				-- }) library:apply_theme(main_holder, "outline", "BackgroundColor3") 
 				
+				local team_name = (player_obj and player_obj.Team and player_obj.Team.Name) or "No Team"
+				local team_color = (player_obj and player_obj.Team and player_obj.Team.TeamColor and player_obj.Team.TeamColor.Color) or themes.preset.text
+
 				local priority_text = library:create("TextLabel", {
 					Parent = TextButton,
 					Name = "",
 					FontFace = library.font,
-					TextColor3 = tostring(player) ~= lp.Name and themes.preset.text or rgb(0, 0, 255),
+					TextColor3 = tostring(player) ~= lp.Name and team_color or rgb(0, 0, 255),
 					BorderColor3 = rgb(0, 0, 0),
-					Text = tostring(player) ~= lp.Name and "Neutral" or "LocalPlayer",
+					Text = tostring(player) ~= lp.Name and team_name or "LocalPlayer",
 					BackgroundTransparency = 1,
 					TextXAlignment = Enum.TextXAlignment.Left,
 					BorderSizePixel = 0,
@@ -6151,9 +6330,9 @@
 					BackgroundColor3 = themes.preset.outline
 				}) library:apply_theme(main_holder, "outline", "BackgroundColor3") 
 
-				path.instance = TextButton 
-				path.line = line 
-				path.priority = "Neutral"
+				path.instance = TextButton
+				path.line = line
+				path.priority = team_name
 				path.priority_text = priority_text
 				-- library.selected_player = players[tostring(player)]
 				
@@ -6167,16 +6346,21 @@
 						selected_button = nil 
 					end     
 
-					selected_button = player_name 
-					player_name.TextColor3 = themes.preset.accent 
+					selected_button = player_name
+					player_name.TextColor3 = themes.preset.accent
 
 					library.selected_player = player_name.Text
-					library.config_flags["PLAYERLIST_DROPDOWN"](path.priority_text.Text)
 
-					if cfg.labels.name then 
+					if cfg.labels.name then
 						cfg.labels.name.set("User: " .. player_name.Text)
 						cfg.labels.display.set("DisplayName: " .. players[player_name.Text].DisplayName)
 						cfg.labels.uid.set("User Id: " .. players[player_name.Text].UserId)
+					end
+				end)
+
+				TextButton.MouseButton2Click:Connect(function()
+					if player_obj then
+						open_player_actions(player_obj)
 					end
 				end)
 

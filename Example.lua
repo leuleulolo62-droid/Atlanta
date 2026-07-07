@@ -10,8 +10,6 @@ local players_service = game:GetService("Players")
 	local Aiming = window:tab({name = "Aiming"})
 	local Misc = window:tab({name = "Misc"})
 	local Visuals = window:tab({name = "Visuals"})
-	local Viewer3D = window:tab({name = "3D Viewer"})
-	local Music = window:tab({name = "Music"})
 
 	-- Aiming
 		local column =  Aiming:column() 
@@ -95,11 +93,6 @@ local players_service = game:GetService("Players")
 		section:toggle({name = "Weapon", flag = "Weapon", callback = update_elements})
 		:colorpicker({name = "Weapon Color", flag = "Weapon_Color", callback = update_elements})
 		esp = window.esp_section:esp_preview({})
-	--
-
-	-- 3D Viewer
-		local viewer_column = Viewer3D:column()
-		local viewer_section = viewer_column:section({name = "Character Preview"})
 
 		local player_names = {}
 		for _, plr in players_service:GetPlayers() do
@@ -107,20 +100,16 @@ local players_service = game:GetService("Players")
 		end
 		if #player_names == 0 then player_names = {players_service.LocalPlayer.Name} end
 
-		local viewer_preview = viewer_section:esp_preview({player = players_service.LocalPlayer})
-
-		viewer_section:dropdown({name = "Player", flag = "viewer_target_player", items = player_names, default = players_service.LocalPlayer.Name, callback = function(selected_name)
+		window.esp_section:dropdown({name = "Preview Player", flag = "viewer_target_player", items = player_names, default = players_service.LocalPlayer.Name, callback = function(selected_name)
 			local target = players_service:FindFirstChild(selected_name)
-			if target then viewer_preview.set_player(target) end
+			if target then esp.set_player(target) end
 		end})
 	--
 
-	-- Music
-		local music_column = Music:column()
-		local music_section = music_column:section({name = "Now Playing"})
-		local music = music_section:music_player({flag = "music_input"})
+	-- Music (its own floating panel, opened from the dock like Configurations/Playerlist)
+		local music = window.music_section:music_player({flag = "music_input"})
 
-		music_section:slider({name = "Volume", min = 0, max = 100, default = 50, interval = 1, suffix = "%", flag = "music_volume", callback = function(value)
+		window.music_section:slider({name = "Volume", min = 0, max = 100, default = 50, interval = 1, suffix = "%", flag = "music_volume", callback = function(value)
 			music.sound.Volume = value / 100
 		end})
 	--
