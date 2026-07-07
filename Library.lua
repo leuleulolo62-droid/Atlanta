@@ -82,7 +82,6 @@
 		connections = {},
 		notifications = {},
 		playerlist_data = {},
-		searchable_sections = {},
 		playerlist_actions = {
 			{name = "Teleport To", callback = function(player_obj)
 				local target_root = player_obj.Character and player_obj.Character:FindFirstChild("HumanoidRootPart")
@@ -1713,7 +1712,7 @@
 					Parent = items.holder,
 					Name = " ",
 					BackgroundTransparency = 1,
-					Size = dim2(1, -112, 0, 22),
+					Size = dim2(1, 0, 0, 22),
 					BorderColor3 = rgb(0, 0, 0),
 					ZIndex = 5,
 					BorderSizePixel = 0,
@@ -1727,56 +1726,6 @@
 					Padding = dim(0, 2),
 					SortOrder = Enum.SortOrder.LayoutOrder
 				})
-
-				-- search bar (filters sections by name in whichever tab is open)
-				local search_outline = library:create("Frame", {
-					Parent = items.holder,
-					Name = " ",
-					AnchorPoint = vec2(1, 0),
-					Position = dim2(1, 0, 0, 0),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 108, 0, 22),
-					ZIndex = 5,
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(search_outline, "outline", "BackgroundColor3")
-
-				local search_inline = library:create("Frame", {
-					Parent = search_outline,
-					Name = "\0",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					ZIndex = 5,
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(search_inline, "inline", "BackgroundColor3")
-
-				local search_box = library:create("TextBox", {
-					Parent = search_inline,
-					Name = "\0",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					PlaceholderText = "Search options...",
-					PlaceholderColor3 = rgb(140, 140, 140),
-					Text = "",
-					ClearTextOnFocus = false,
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -8, 1, 0),
-					Position = dim2(0, 4, 0, 0),
-					ZIndex = 5,
-					TextSize = 12,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left
-				})
-
-				search_box:GetPropertyChangedSignal("Text"):Connect(function()
-					local query = string.lower(search_box.Text)
-
-					for _, entry in library.searchable_sections do
-						entry.frame.Visible = (query == "" or string.find(string.lower(entry.name), query, 1, true) ~= nil)
-					end
-				end)
 
 				local section_holder = library:create("Frame", {
 					Parent = items.holder,
@@ -3084,14 +3033,13 @@
 			-- 
 
 			-- section instances 
-				local section_holder = library:create("CanvasGroup", {
+				local section_holder = library:create("Frame", {
 					Parent = library.section_holder,
 					BackgroundTransparency = 1,
 					Name = "\0",
 					BorderColor3 = rgb(0, 0, 0),
 					Size = dim2(1, 0, 1, 0),
 					BorderSizePixel = 0,
-					GroupTransparency = 1,
 					Visible = false,
 					BackgroundColor3 = rgb(255, 255, 255)
 				})
@@ -3110,16 +3058,11 @@
 			function cfg.open_tab()
 				if library.current_tab and library.current_tab[1] ~= background then
 					local button = library.current_tab[1]
-					local closing_holder = library.current_tab[2]
-
-					library:tween(button, {Size = dim2(1, -2, 1, -1)})
+					button.Size = dim2(1, -2, 1, -1)
 					button:FindFirstChildOfClass("UIGradient").Rotation = 90
 					button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.text
 
-					library:tween(closing_holder, {GroupTransparency = 1})
-					task.delay(0.18, function()
-						closing_holder.Visible = false
-					end)
+					library.current_tab[2].Visible = false
 
 					library.current_tab = nil
 				end
@@ -3129,15 +3072,13 @@
 				}
 
 				local button = library.current_tab[1]
-				library:tween(button, {Size = dim2(1, -2, 1, 0)}) -- ENABLED
+				button.Size = dim2(1, -2, 1, 0) -- ENABLED
 				button:FindFirstChildOfClass("UIGradient").Rotation = -90
 				button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.accent
 
 				section_holder.Visible = true
-				section_holder.GroupTransparency = 1
-				library:tween(section_holder, {GroupTransparency = 0})
 
-				if library.current_element_open and library.current_element_open ~= cfg then 
+				if library.current_element_open and library.current_element_open ~= cfg then
 					library.current_element_open.set_visible(false)
 					library.current_element_open.open = false 
 					library.current_element_open = nil 
@@ -3511,11 +3452,9 @@
 			})
 			cfg.holder = elements
 
-			insert(library.searchable_sections, {name = cfg.name, frame = section})
-
 			library:create("UIListLayout", {
 				Parent = elements,
-				Padding = dim(0, 4),
+				Padding = dim(0, 8),
 				HorizontalAlignment = Enum.HorizontalAlignment.Center,
 				SortOrder = Enum.SortOrder.LayoutOrder
 			})
