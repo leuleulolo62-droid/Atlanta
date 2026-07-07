@@ -1,5 +1,4 @@
--- NOTE: still points at the original library. Point this at wherever you host Library.lua from this modified folder once ready.
-local library, themes = loadstring(game:HttpGet("https://raw.githubusercontent.com/i77lhm/Libraries/refs/heads/main/Atlanta/Library.lua"))()
+local library, themes = loadstring(game:HttpGet("https://raw.githubusercontent.com/leuleulolo62-droid/Atlanta/refs/heads/main/Library.lua"))()
 
 local dim2 = UDim2.new
 local hex = Color3.fromHex
