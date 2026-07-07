@@ -92,10 +92,11 @@
 			end}
 		},
 
-		current_tab, 
-		current_element_open, 
-		dock_button_holder,  
-		old_config; 
+		current_tab,
+		current_element_open,
+		dock_button_holder,
+		old_config;
+		notification_side = "Right",
 		font, 
 		keybind_list,
 		binds = {}, 
@@ -1918,8 +1919,11 @@
 					library:load_config(readfile(library.directory .. "/configs/" .. name .. ".cfg"))
 				end 
 
-				local column = setmetatable(items, library):column() 
+				local column = setmetatable(items, library):column()
 				local section = column:section({name = "Options"})
+					section:dropdown({name = "Notification Side", items = {"Right", "Left"}, default = "Right", flag = "notification_side", callback = function(text)
+						library.notification_side = text
+					end})
 					config_holder = section:list({flag = "config_name_list"})
 					section:textbox({flag = "config_name_text_box"})
 					section:button_holder({})
@@ -2816,10 +2820,29 @@
 			return setmetatable(cfg, library)
 		end
 
+		function library:notification_x()
+			if library.notification_side == "Left" then
+				return dim2(0, 20, 0, 0)
+			else
+				return dim2(1, -20, 0, 0)
+			end
+		end
+
+		function library:notification_anchors()
+			-- (start, rest) — start is used at creation and as the destroy target,
+			-- rest is where the entrance tween settles.
+			if library.notification_side == "Left" then
+				return vec2(1, 0), vec2(0, 0)
+			else
+				return vec2(0, 0), vec2(1, 0)
+			end
+		end
+
 		function library:refresh_notifications()
-			for _, notif in next, library.notifications do 
-				tween_service:Create(notif, TweenInfo.new(0.3, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut), {Position = dim2(0, 20, 0, 72 + (_ * 28))}):Play()
-			end     
+			local x = library:notification_x()
+			for _, notif in next, library.notifications do
+				tween_service:Create(notif, TweenInfo.new(0.3, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut), {Position = dim2(x.X.Scale, x.X.Offset, 0, 72 + (_ * 28))}):Play()
+			end
 		end
 
 		function library:notification(properties)
@@ -2830,16 +2853,19 @@
 			}
 		
 			-- Instances
+				local notif_start_anchor, notif_rest_anchor = library:notification_anchors()
+				local notif_x = library:notification_x()
+
 				local watermark_outline = library:create("Frame", {
 					Parent = notif_holder,
 					Name = "",
 					Size = UDim2.new(0, 0, 0, 24),
 					BorderColor3 = rgb(0, 0, 0),
 					BorderSizePixel = 0,
-					Position = UDim2.new(0, 20, 0, 72 + (#library.notifications * 28)),
+					Position = UDim2.new(notif_x.X.Scale, notif_x.X.Offset, 0, 72 + (#library.notifications * 28)),
 					AutomaticSize = Enum.AutomaticSize.X,
 					BackgroundColor3 = themes.preset.outline,
-					AnchorPoint = Vector2.new(1, 0)
+					AnchorPoint = notif_start_anchor
 				})
 			
 				local watermark_inline = library:create("Frame", {
@@ -2934,7 +2960,7 @@
 
 				library:refresh_notifications()
 
-				tween_service:Create(watermark_outline, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {AnchorPoint = Vector2.new(0, 0)}):Play()
+				tween_service:Create(watermark_outline, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {AnchorPoint = notif_rest_anchor}):Play()
 				
 				tween_service:Create(accent_bottom, TweenInfo.new(cfg.time, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {Size = UDim2.new(1, -4, 0, 1)}):Play()
 			--
@@ -2944,7 +2970,7 @@
 
 				library.notifications[index] = nil
 
-				tween_service:Create(watermark_outline, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {AnchorPoint = Vector2.new(1, 0), BackgroundTransparency = 1}):Play()
+				tween_service:Create(watermark_outline, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {AnchorPoint = notif_start_anchor, BackgroundTransparency = 1}):Play()
 				
 				for _, v in next, watermark_outline:GetDescendants() do 
 					if v:IsA("TextLabel") then 
@@ -4534,7 +4560,7 @@
 					BorderColor3 = rgb(0, 0, 0),
 					Text = "[ Toggle ] " .. tostring(options.name) .. " - none",
 					Size = dim2(1, -5, 0, 18),
-					Visible = (options.list_mode or "always") == "always",
+					Visible = ((options.list_mode or "always") == "always") and (options.key ~= nil),
 					TextTransparency = 0.5,
 					Position = dim2(0, 5, 0, -1),
 					BorderSizePixel = 0,
@@ -4826,7 +4852,7 @@
 					}
 					
 					if cfg.name then
-						KEYBIND_ELEMENT.Visible = (cfg.list_mode == "always") or cfg.active
+						KEYBIND_ELEMENT.Visible = ((cfg.list_mode == "always") or cfg.active) and (cfg.key ~= nil)
 
 						library:tween(KEYBIND_ELEMENT, {
 							TextTransparency = cfg.active and 0 or 0.5,
@@ -4924,7 +4950,7 @@
 			function cfg.set_list_mode(mode)
 				cfg.list_mode = mode == "Only When Active" and "active_only" or "always"
 				if cfg.name then
-					KEYBIND_ELEMENT.Visible = (cfg.list_mode == "always") or cfg.active
+					KEYBIND_ELEMENT.Visible = ((cfg.list_mode == "always") or cfg.active) and (cfg.key ~= nil)
 				end
 			end
 
