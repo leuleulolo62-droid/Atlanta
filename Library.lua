@@ -2739,6 +2739,7 @@
 
 				character.Parent = items.viewportframe
 				items.camera.CameraSubject = character
+				chams_highlight.Adornee = character
 				objects["name"].Text = string.format("%s (@%s)", new_player.DisplayName, new_player.Name)
 				cfg.frame_offset_y, cfg.distance = compute_frame(character)
 
