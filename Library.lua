@@ -847,8 +847,9 @@
 						BackgroundTransparency = 1,
 						Image = options.logo or "",
 						Visible = has_logo,
-						Position = dim2(0, 2, 0, 3),
-						Size = dim2(0, 14, 0, 14),
+						ZIndex = 5,
+						Position = dim2(0, 2, 0, 2),
+						Size = dim2(0, 22, 0, 22),
 						ScaleType = Enum.ScaleType.Fit,
 					})
 
@@ -860,7 +861,7 @@
 						BorderColor3 = rgb(0, 0, 0),
 						Text = cfg.name,
 						BackgroundTransparency = 1,
-						Position = has_logo and dim2(0, 20, 0, 4) or dim2(0, 2, 0, 4),
+						Position = has_logo and dim2(0, 26, 0, 4) or dim2(0, 2, 0, 4),
 						BorderSizePixel = 0,
 						AutomaticSize = Enum.AutomaticSize.XY,
 						TextSize = 12,
@@ -2494,9 +2495,7 @@
 
 				items.camera = library:create( "Camera" , {
 					FieldOfView = 70.00022888183594;
-					CameraType = Enum.CameraType.Track;
-					Focus = cfr(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1); -- bro wtf is this serializer doing
-					CFrame = cfr(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1);
+					CameraType = Enum.CameraType.Scriptable;
 					Parent = ws;
 					Name = "\0"
 				});
@@ -2508,8 +2507,14 @@
 				-- inside a WorldModel, which gets real per-frame simulation.
 				items.world_model = library:create("WorldModel", {Parent = items.viewportframe})
 				character.Parent = items.world_model
-
-				items.camera.CameraSubject = character
+				-- The character used to be what orbited (rotated in place every
+				-- frame via SetPrimaryPartCFrame) with a static camera -- but
+				-- that rigid whole-model transform fights a Motor6D-driven
+				-- animation for control of the same parts every frame, so an
+				-- AnimationTrack could report itself as playing/advancing while
+				-- never visibly moving. The camera orbits a now-static character
+				-- instead, leaving the rig free for the animation system.
+				character:SetPrimaryPartCFrame(cfr(0, 1 - cfg.frame_offset_y, 0))
 
 				-- drag to rotate (mouse or touch), pauses auto-spin while held
 				local drag_start_x = 0
@@ -2535,12 +2540,30 @@
 					end
 				end)
 
+				-- The panel's own content lives in a ScrollingFrame, which by
+				-- default also consumes MouseWheel to scroll its canvas --
+				-- fighting our own zoom handler for the same scroll gesture.
+				-- Disabling it only while the cursor is over the viewport
+				-- leaves normal panel scrolling untouched everywhere else.
+				do
+					local scroll_ancestor = items.viewportframe.Parent
+					while scroll_ancestor and not scroll_ancestor:IsA("ScrollingFrame") do
+						scroll_ancestor = scroll_ancestor.Parent
+					end
+					if scroll_ancestor then
+						items.viewportframe.MouseEnter:Connect(function() scroll_ancestor.ScrollingEnabled = false end)
+						items.viewportframe.MouseLeave:Connect(function() scroll_ancestor.ScrollingEnabled = true end)
+					end
+				end
+
 				library:connection(run.RenderStepped, function()
 					task.wait()
 					if not cfg.dragging then
 						cfg.rotation += 0.5
 					end
-					character:SetPrimaryPartCFrame(cfr(Vector3.new(0, 1 - cfg.frame_offset_y, -cfg.distance * cfg.zoom)) * angle(0, math.rad(cfg.rotation), 0))
+					local charPos = Vector3.new(0, 1 - cfg.frame_offset_y, 0)
+					local camPos = charPos + (angle(0, math.rad(cfg.rotation), 0) * Vector3.new(0, 0, -cfg.distance * cfg.zoom))
+					items.camera.CFrame = cfr(camPos, charPos)
 
 					if aura_on then
 						local root = character.PrimaryPart or character:FindFirstChild("HumanoidRootPart")
@@ -2964,10 +2987,10 @@
 				end
 
 				character.Parent = items.world_model
-				items.camera.CameraSubject = character
 				chams_highlight.Adornee = character
 				objects["name"].Text = string.format("%s (@%s)", new_player.DisplayName, new_player.Name)
 				cfg.frame_offset_y, cfg.distance = compute_frame(character)
+				character:SetPrimaryPartCFrame(cfr(0, 1 - cfg.frame_offset_y, 0))
 				cfg.refresh_elements()
 				play_animation(cfg.current_anim_kind)
 
