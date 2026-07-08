@@ -2299,7 +2299,7 @@
 		end
 
 		function library:esp_preview(properties)
-			local cfg = {items = {}, rotation = 0; objects = {}; player = properties.player or lp; dragging = false; frame_offset_y = 0; distance = 6}
+			local cfg = {items = {}, rotation = 0; objects = {}; player = properties.player or lp; dragging = false; frame_offset_y = 0; distance = 6; zoom = 1}
 
 			-- esp_preview can be used standalone (no matching Enabled/Names/Box_Color/etc
 			-- flags registered elsewhere) so every flag read falls back to a sane default
@@ -2510,6 +2510,8 @@
 					if cfg.dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 						cfg.rotation = cfg.rotation - (input.Position.X - drag_start_x) * 0.5
 						drag_start_x = input.Position.X
+					elseif input.UserInputType == Enum.UserInputType.MouseWheel then
+						cfg.zoom = clamp(cfg.zoom - input.Position.Z * 0.1, 0.5, 2.5)
 					end
 				end)
 
@@ -2524,7 +2526,7 @@
 					if not cfg.dragging then
 						cfg.rotation += 0.5
 					end
-					character:SetPrimaryPartCFrame(cfr(Vector3.new(0, 1 - cfg.frame_offset_y, -cfg.distance)) * angle(0, math.rad(cfg.rotation), 0))
+					character:SetPrimaryPartCFrame(cfr(Vector3.new(0, 1 - cfg.frame_offset_y, -cfg.distance * cfg.zoom)) * angle(0, math.rad(cfg.rotation), 0))
 
 					if aura_on then
 						local root = character.PrimaryPart or character:FindFirstChild("HumanoidRootPart")
