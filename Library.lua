@@ -80,6 +80,7 @@
 		visible_flags = {}, 
 		guis = {},
 		panels = {},
+		reorderable_columns = {},
 		font_labels = {},
 		connections = {},
 		notifications = {},
@@ -522,6 +523,22 @@
 			end
 			Config.__panel_layout = panel_layout
 
+			-- Groupbox drag-to-reorder (see library:column's reorderable option)
+			-- is also just a LayoutOrder on each section, not a flag -- save it
+			-- keyed by title text so it survives a save/load same as everything
+			-- else. Two same-named groupboxes in one column would collide here;
+			-- none currently are, and that's an acceptable tradeoff for not
+			-- needing a second id scheme just for this.
+			local section_order = {}
+			for _, column in library.reorderable_columns do
+				for i, section in column.sections do
+					if section.Parent then
+						section_order[column.section_names[i]] = section.LayoutOrder
+					end
+				end
+			end
+			Config.__section_order = section_order
+
 			return http_service:JSONEncode(Config)
 		end
 
@@ -535,6 +552,13 @@
 						if frame then
 							frame.Position = dim2(p[1], p[2], p[3], p[4])
 							frame.Size = dim2(p[5], p[6], p[7], p[8])
+						end
+					end
+				elseif _ == "__section_order" then
+					for _, column in library.reorderable_columns do
+						for i, section in column.sections do
+							local order = v[column.section_names[i]]
+							if order then section.LayoutOrder = order end
 						end
 					end
 				else
@@ -3500,6 +3524,7 @@
 				cfg.reorderable = true
 				cfg.section_count = 0
 				cfg.sections = {}
+				cfg.section_names = {}
 				cfg.indicator = library:create("Frame", {
 					Parent = column,
 					Name = "\0",
@@ -3509,6 +3534,7 @@
 					ZIndex = 50,
 					Visible = false,
 				})
+				insert(library.reorderable_columns, cfg)
 			end
 
 			return setmetatable(cfg, library)
@@ -3870,6 +3896,7 @@
 				self.section_count = self.section_count + 1
 				section.LayoutOrder = self.section_count
 				insert(self.sections, section)
+				insert(self.section_names, cfg.name)
 
 				local drag_stroke = library:create("UIStroke", {
 					Parent = section,
