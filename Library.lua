@@ -80,6 +80,7 @@
 		visible_flags = {}, 
 		guis = {},
 		panels = {},
+		font_labels = {},
 		connections = {},
 		notifications = {},
 		playerlist_data = {},
@@ -240,23 +241,20 @@
 		makefolder(library.directory .. path)
 	end 
 
-	writefile("ffff.ttf", game:HttpGet("https://github.com/weasely111/beta/raw/refs/heads/main/fs-tahoma-8px.ttf"))
-
-	local tahoma = {
-		name = "SmallestPixel7",
-		faces = {
-			{
-				name = "Regular",
-				weight = 400,
-				style = "normal",
-				assetId = getcustomasset("ffff.ttf")
-			}
-		}
+	-- Built-in Roblox font families instead of a downloaded pixel-tahoma TTF --
+	-- no HTTP dependency/download risk, and gives Style a real set of choices
+	-- to switch between (library:set_font, wired to a flag so it saves/loads
+	-- with the rest of a config).
+	library.font_presets = {
+		["Gotham Medium"] = Font.fromEnum(Enum.Font.GothamMedium),
+		["Gotham Bold"] = Font.fromEnum(Enum.Font.GothamBold),
+		Gotham = Font.fromEnum(Enum.Font.Gotham),
+		Montserrat = Font.fromEnum(Enum.Font.Montserrat),
+		["Source Sans"] = Font.fromEnum(Enum.Font.SourceSansPro),
+		Ubuntu = Font.fromEnum(Enum.Font.Ubuntu),
+		Code = Font.fromEnum(Enum.Font.Code),
 	}
-
-	writefile("dddd.ttf", http_service:JSONEncode(tahoma))
-
-	library.font = Font.new(getcustomasset("dddd.ttf"), Enum.FontWeight.Regular)
+	library.font = library.font_presets["Gotham Medium"]
 
 	local config_holder 
 -- 
@@ -614,13 +612,23 @@
 				-- doing it, not text we wrote in French). Force it off so this
 				-- UI always renders exactly the English text we set.
 				ins.AutoLocalize = false
+				-- Tracked so library:set_font can live-update every existing
+				-- label instead of only affecting elements created afterward.
+				insert(library.font_labels, ins)
 			elseif instance == "ScreenGui" then
 				insert(library.guis, ins)
 			end
 
 			return ins
 		end
-	-- 
+
+		function library:set_font(font)
+			library.font = font
+			for _, lbl in pairs(library.font_labels) do
+				if lbl.Parent then pcall(function() lbl.FontFace = font end) end
+			end
+		end
+	--
 
 	-- elements 
 		local tooltip_sgui = library:create("ScreenGui", {
@@ -1939,6 +1947,10 @@
 				:colorpicker({name = "Outline", color = themes.preset.text_outline, callback = function(color, alpha)
 					library:update_theme("text_outline", color)
 				end, flag = "Outline"})
+				section:dropdown({name = "Font", items = {"Gotham Medium", "Gotham Bold", "Gotham", "Montserrat", "Source Sans", "Ubuntu", "Code"}, default = "Gotham Medium", flag = "menu_font", callback = function(name)
+					local font = library.font_presets[name]
+					if font then library:set_font(font) end
+				end})
 				section:label({name = "Glow"})
 				:colorpicker({name = "Glow", color = themes.preset.glow, callback = function(color, alpha)
 					library:update_theme("glow", color)
@@ -3456,11 +3468,11 @@
 			return setmetatable(cfg, library) 
 		end
 
-		function library:column(path) 
+		function library:column(path, options)
 			local cfg = {}
-			
+
 			local holder = path or self.holder
-			
+
 			local column = library:create("Frame", {
 				Parent = holder,
 				BackgroundTransparency = 1,
@@ -3469,18 +3481,37 @@
 				Size = dim2(1, 0, 1, 0),
 				BorderSizePixel = 0,
 				BackgroundColor3 = themes.preset.inline
-			}) library:apply_theme(column, "inline", "BackgroundColor3") 
-			
+			}) library:apply_theme(column, "inline", "BackgroundColor3")
+
 			library:create("UIListLayout", {
 				Parent = column,
 				Padding = dim(0, 4),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 				VerticalFlex = Enum.UIFlexAlignment.Fill
 			})
-			
+
 			cfg["holder"] = column
 
-			return setmetatable(cfg, library) 
+			-- Section drag-to-reorder is opt-in (only the main window's tab
+			-- columns request it -- Style/Configurations/ESP Preview/Playerlist/
+			-- Music all build their own layout through this same function and
+			-- must not grow drag handles too).
+			if options and options.reorderable then
+				cfg.reorderable = true
+				cfg.section_count = 0
+				cfg.sections = {}
+				cfg.indicator = library:create("Frame", {
+					Parent = column,
+					Name = "\0",
+					BackgroundColor3 = rgb(80, 160, 255),
+					BorderSizePixel = 0,
+					Size = dim2(1, 0, 0, 3),
+					ZIndex = 50,
+					Visible = false,
+				})
+			end
+
+			return setmetatable(cfg, library)
 		end
 
 		function library:multi_section(options)
@@ -3829,6 +3860,72 @@
 				Parent = ScrollingFrame,
 				PaddingBottom = dim(0, 10)
 			})
+
+			-- Drag-to-reorder, opt-in per column (see library:column). The
+			-- indicator's position is driven by LayoutOrder (half-steps between
+			-- the two sections it'd land between) instead of manual Position math,
+			-- so it rides the SAME UIListLayout the sections do rather than
+			-- fighting it.
+			if self.reorderable then
+				self.section_count = self.section_count + 1
+				section.LayoutOrder = self.section_count
+				insert(self.sections, section)
+
+				local drag_stroke = library:create("UIStroke", {
+					Parent = section,
+					Color = rgb(80, 160, 255),
+					Thickness = 2,
+					Enabled = false,
+				})
+
+				local column_cfg = self
+				local dragging = false
+
+				text.Active = true
+				text.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 then
+						dragging = true
+						drag_stroke.Enabled = true
+					end
+				end)
+
+				library:connection(uis.InputChanged, function(input)
+					if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+						local mouse_y = input.Position.Y
+						local best, best_before, best_dist = nil, true, math.huge
+						for _, sib in column_cfg.sections do
+							if sib.Parent and sib ~= section then
+								local pos, size = sib.AbsolutePosition, sib.AbsoluteSize
+								local mid = pos.Y + size.Y / 2
+								local dist = abs(mouse_y - mid)
+								if dist < best_dist then
+									best_dist = dist
+									best = sib
+									best_before = mouse_y < mid
+								end
+							end
+						end
+						if best then
+							column_cfg.indicator.LayoutOrder = best_before and (best.LayoutOrder - 0.5) or (best.LayoutOrder + 0.5)
+							column_cfg.indicator.Visible = true
+							column_cfg.pending_target = best
+						end
+					end
+				end)
+
+				library:connection(uis.InputEnded, function(input)
+					if dragging and input.UserInputType == Enum.UserInputType.MouseButton1 then
+						dragging = false
+						drag_stroke.Enabled = false
+						column_cfg.indicator.Visible = false
+						local target = column_cfg.pending_target
+						if target and target.Parent then
+							section.LayoutOrder = column_cfg.indicator.LayoutOrder
+						end
+						column_cfg.pending_target = nil
+					end
+				end)
+			end
 
 			return setmetatable(cfg, library)
 		end
