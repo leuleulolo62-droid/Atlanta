@@ -367,6 +367,16 @@
 
 			frame.InputBegan:Connect(function(input)
 				if input.UserInputType == Enum.UserInputType.MouseButton1 then
+					-- Roblox fires InputBegan on every overlapping GuiObject under
+					-- the cursor, not just the topmost one -- a nested interactive
+					-- child (ESP/skin preview viewport with its own drag-to-rotate)
+					-- would otherwise ALSO drag this whole panel on the same click.
+					-- Only start the panel drag if this panel is genuinely the
+					-- topmost thing under the cursor.
+					local topHit = lp and lp:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)[1]
+					if topHit and topHit ~= frame and topHit:IsA("ViewportFrame") then
+						return
+					end
 					dragging = true
 					start = input.Position
 					start_size = frame.Position
