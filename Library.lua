@@ -250,7 +250,7 @@
 		["Gotham Bold"] = Font.fromEnum(Enum.Font.GothamBold),
 		Gotham = Font.fromEnum(Enum.Font.Gotham),
 		Montserrat = Font.fromEnum(Enum.Font.Montserrat),
-		["Source Sans"] = Font.fromEnum(Enum.Font.SourceSansPro),
+		["Source Sans"] = Font.fromEnum(Enum.Font.SourceSans),
 		Ubuntu = Font.fromEnum(Enum.Font.Ubuntu),
 		Code = Font.fromEnum(Enum.Font.Code),
 	}
