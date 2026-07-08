@@ -835,8 +835,23 @@
 					}
 					})
 		
-					library:apply_theme(items.UIGradient, "contrast", "Color") 
-					
+					library:apply_theme(items.UIGradient, "contrast", "Color")
+
+					-- Optional square logo badge next to the title text (only
+					-- the main window passes properties.logo through -- other
+					-- panels built via this same factory just get nil/"").
+					local has_logo = options.logo and options.logo ~= ""
+					items.logo = library:create("ImageLabel", {
+						Parent = items.window_holder,
+						Name = "",
+						BackgroundTransparency = 1,
+						Image = options.logo or "",
+						Visible = has_logo,
+						Position = dim2(0, 2, 0, 3),
+						Size = dim2(0, 14, 0, 14),
+						ScaleType = Enum.ScaleType.Fit,
+					})
+
 					items.text = library:create("TextLabel", {
 						Parent = items.window_holder,
 						Name = "",
@@ -845,7 +860,7 @@
 						BorderColor3 = rgb(0, 0, 0),
 						Text = cfg.name,
 						BackgroundTransparency = 1,
-						Position = dim2(0, 2, 0, 4),
+						Position = has_logo and dim2(0, 20, 0, 4) or dim2(0, 2, 0, 4),
 						BorderSizePixel = 0,
 						AutomaticSize = Enum.AutomaticSize.XY,
 						TextSize = 12,
@@ -1776,6 +1791,7 @@
 					size = dim2(0, 604, 0, 628),
 					position = dim2(0, (camera.ViewportSize.X / 2) - 302 - 96, 0, (camera.ViewportSize.Y / 2) - 421 - 12),
 					image = "rbxassetid://98823308062942",
+					logo = properties and properties.logo,
 				})
 
 				local items = main_window.items
