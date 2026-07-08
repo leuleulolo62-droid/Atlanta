@@ -2235,13 +2235,20 @@
 
 			-- esp_preview can be used standalone (no matching Enabled/Names/Box_Color/etc
 			-- flags registered elsewhere) so every flag read falls back to a sane default
-			-- instead of indexing nil and crashing preview construction.
+			-- instead of indexing nil and crashing preview construction. A caller whose
+			-- own flag names don't match this library's (e.g. a shim with its own
+			-- "ESPEnabled"/"ESPBox" naming) can instead push live values directly via
+			-- cfg.set_state({Enabled=true, Boxes=true, Box_Color=Color3...}) -- those
+			-- override the flags/default lookup entirely once set.
+			cfg.overrides = nil
 			local function fget(name, default)
+				if cfg.overrides and cfg.overrides[name] ~= nil then return cfg.overrides[name] end
 				local f = flags[name]
 				if f == nil then return default end
 				return f
 			end
 			local function fcolor(name, default)
+				if cfg.overrides and cfg.overrides[name] ~= nil then return cfg.overrides[name] end
 				local f = flags[name]
 				return (type(f) == "table" and f.Color) or default
 			end
@@ -2262,6 +2269,17 @@
 			local character = cfg.player.Character:Clone()
 			character.Animate:Destroy()
 			cfg.frame_offset_y, cfg.distance = compute_frame(character)
+
+			-- Parented to library.cache (not the character) so it survives
+			-- set_player() swapping/destroying the cloned character -- only
+			-- Adornee needs to be repointed there, not this Highlight itself.
+			local chams_highlight = library:create("Highlight", {
+				Parent = library.cache;
+				Adornee = character;
+				FillTransparency = 0;
+				OutlineTransparency = 1;
+				Enabled = false;
+			})
 
 			local items = cfg.items; do
 				items.viewportframe = library:create( "ViewportFrame" , {
@@ -2688,9 +2706,17 @@
 				for _, corner in objects[ "corners" ]:GetChildren() do
 					corner.Frame.BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 				end
+
+				chams_highlight.Enabled = fget("Chams", false)
+				chams_highlight.FillColor = fcolor("Chams_Color", rgb(138, 43, 226))
 			end
 
 			cfg.refresh_elements()
+
+			function cfg.set_state(state)
+				cfg.overrides = state
+				cfg.refresh_elements()
+			end
 
 			task.spawn(function()
 				while true do
