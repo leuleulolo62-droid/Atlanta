@@ -2382,37 +2382,13 @@
 				Scale = vec3(2, 0.8, 2);
 			})
 
-			-- Aura preview: Trails/ParticleEmitters don't render in a ViewportFrame
-			-- either (same limitation as Highlight), so this fakes the look with a
-			-- handful of small Neon orbs orbiting the HumanoidRootPart, repositioned
-			-- every frame in the render loop below. Declared before apply_chams_tint
-			-- for the same "skip by identity" reason china_hat is.
-			local aura_orbs = {}
-			for i = 1, 6 do
-				aura_orbs[i] = library:create("Part", {
-					Parent = library.cache;
-					Name = "\0";
-					Shape = Enum.PartType.Ball;
-					Size = vec3(0.4, 0.4, 0.4);
-					Anchored = false;
-					CanCollide = false;
-					CanQuery = false;
-					CanTouch = false;
-					Material = Enum.Material.Neon;
-					Color = rgb(255, 110, 0);
-				})
-			end
-			local aura_on = false
-
 			-- Highlight instances don't render inside ViewportFrame (a platform
 			-- limitation, not a config bug) -- so Chams needs a second, real
 			-- technique for the preview: tint the clone's parts directly.
 			-- Original colors are stashed via attribute so toggling off restores them.
 			local function apply_chams_tint(on, color)
 				for _, part in character:GetDescendants() do
-					local is_orb = false
-					for _, orb in aura_orbs do if part == orb then is_orb = true break end end
-					if part:IsA("BasePart") and part ~= china_hat and not is_orb then
+					if part:IsA("BasePart") and part ~= china_hat then
 						if on then
 							if part:GetAttribute("_chamsOrigColor") == nil then
 								part:SetAttribute("_chamsOrigColor", part.Color)
@@ -2439,31 +2415,32 @@
 				end
 			end
 
-			local aura_color1, aura_color2 = rgb(255, 110, 0), rgb(255, 0, 0)
-			local function update_aura(on, color1, color2)
-				aura_on = on
-				aura_color1, aura_color2 = color1, color2
-				for i, orb in aura_orbs do
-					orb.Parent = on and character or library.cache
-					orb.Color = (i % 2 == 0) and color2 or color1
-				end
-			end
-
 			-- Walk/Stand/Jump animation preview -- the clone's own "Animate"
 			-- script is destroyed on creation (it fights the manual rotate loop
-			-- above), so these are the standard default R15 animation ids, loaded
-			-- straight onto the clone's Animator.
-			local ANIM_IDS = {
+			-- above), so these are loaded straight onto the clone's Animator.
+			-- R15 and R6 are different skeletons with different joint names --
+			-- an R15 animation loaded onto an R6 rig (or vice versa) reports
+			-- IsPlaying=true and TimePosition ticking forward like normal, but
+			-- silently applies zero poses since none of its joint names exist
+			-- on the rig, so nothing visibly moves. Confirmed live: TimePosition
+			-- advanced but a limb's position relative to the root never changed.
+			local ANIM_IDS_R15 = {
 				Stand = "rbxassetid://507766388",
 				Walk = "rbxassetid://913402848",
 				Jump = "rbxassetid://507765000",
+			}
+			local ANIM_IDS_R6 = {
+				Stand = "rbxassetid://180435571",
+				Walk = "rbxassetid://180426354",
+				Jump = "rbxassetid://125750702",
 			}
 			cfg.current_anim_kind = "Stand"
 			local current_anim_track
 			local function play_animation(kind)
 				cfg.current_anim_kind = kind
 				local humanoid = character:FindFirstChildOfClass("Humanoid")
-				local id = ANIM_IDS[kind]
+				local is_r15 = character:FindFirstChild("UpperTorso") ~= nil
+				local id = (is_r15 and ANIM_IDS_R15 or ANIM_IDS_R6)[kind]
 				if not humanoid or not id then return end
 				local animator = humanoid:FindFirstChildOfClass("Animator") or library:create("Animator", {Parent = humanoid})
 				if current_anim_track then
@@ -2564,17 +2541,6 @@
 					local charPos = Vector3.new(0, 1 - cfg.frame_offset_y, 0)
 					local camPos = charPos + (angle(0, math.rad(cfg.rotation), 0) * Vector3.new(0, 0, -cfg.distance * cfg.zoom))
 					items.camera.CFrame = cfr(camPos, charPos)
-
-					if aura_on then
-						local root = character.PrimaryPart or character:FindFirstChild("HumanoidRootPart")
-						if root then
-							local n = #aura_orbs
-							for i, orb in aura_orbs do
-								local a = (tick() * 2) + (i / n) * (math.pi * 2)
-								orb.CFrame = root.CFrame * cfr(math.cos(a) * 1.4, math.sin(tick() * 3 + i) * 0.3, math.sin(a) * 1.4)
-							end
-						end
-					end
 				end)
 
 				play_animation(cfg.current_anim_kind)
@@ -3016,8 +2982,6 @@
 				apply_chams_tint(chams_on, chams_color)
 
 				update_china_hat(fget("ChinaHat", false), fcolor("ChinaHat_Color", rgb(255, 0, 0)))
-
-				update_aura(fget("Aura", false), fcolor("Aura_Color1", rgb(255, 110, 0)), fcolor("Aura_Color2", rgb(255, 0, 0)))
 			end
 
 			cfg.refresh_elements()
