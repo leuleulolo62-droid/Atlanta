@@ -2372,13 +2372,37 @@
 				Scale = vec3(2, 0.8, 2);
 			})
 
+			-- Aura preview: Trails/ParticleEmitters don't render in a ViewportFrame
+			-- either (same limitation as Highlight), so this fakes the look with a
+			-- handful of small Neon orbs orbiting the HumanoidRootPart, repositioned
+			-- every frame in the render loop below. Declared before apply_chams_tint
+			-- for the same "skip by identity" reason china_hat is.
+			local aura_orbs = {}
+			for i = 1, 6 do
+				aura_orbs[i] = library:create("Part", {
+					Parent = library.cache;
+					Name = "\0";
+					Shape = Enum.PartType.Ball;
+					Size = vec3(0.4, 0.4, 0.4);
+					Anchored = false;
+					CanCollide = false;
+					CanQuery = false;
+					CanTouch = false;
+					Material = Enum.Material.Neon;
+					Color = rgb(255, 110, 0);
+				})
+			end
+			local aura_on = false
+
 			-- Highlight instances don't render inside ViewportFrame (a platform
 			-- limitation, not a config bug) -- so Chams needs a second, real
 			-- technique for the preview: tint the clone's parts directly.
 			-- Original colors are stashed via attribute so toggling off restores them.
 			local function apply_chams_tint(on, color)
 				for _, part in character:GetDescendants() do
-					if part:IsA("BasePart") and part ~= china_hat then
+					local is_orb = false
+					for _, orb in aura_orbs do if part == orb then is_orb = true break end end
+					if part:IsA("BasePart") and part ~= china_hat and not is_orb then
 						if on then
 							if part:GetAttribute("_chamsOrigColor") == nil then
 								part:SetAttribute("_chamsOrigColor", part.Color)
@@ -2404,6 +2428,48 @@
 					china_hat.Parent = library.cache
 				end
 			end
+
+			local aura_color1, aura_color2 = rgb(255, 110, 0), rgb(255, 0, 0)
+			local function update_aura(on, color1, color2)
+				aura_on = on
+				aura_color1, aura_color2 = color1, color2
+				for i, orb in aura_orbs do
+					orb.Parent = on and character or library.cache
+					orb.Color = (i % 2 == 0) and color2 or color1
+				end
+			end
+
+			-- Walk/Stand/Jump animation preview -- the clone's own "Animate"
+			-- script is destroyed on creation (it fights the manual rotate loop
+			-- above), so these are the standard default R15 animation ids, loaded
+			-- straight onto the clone's Animator.
+			local ANIM_IDS = {
+				Stand = "rbxassetid://507766388",
+				Walk = "rbxassetid://913402848",
+				Jump = "rbxassetid://507765000",
+			}
+			cfg.current_anim_kind = "Stand"
+			local current_anim_track
+			local function play_animation(kind)
+				cfg.current_anim_kind = kind
+				local humanoid = character:FindFirstChildOfClass("Humanoid")
+				local id = ANIM_IDS[kind]
+				if not humanoid or not id then return end
+				local animator = humanoid:FindFirstChildOfClass("Animator") or library:create("Animator", {Parent = humanoid})
+				if current_anim_track then
+					pcall(function() current_anim_track:Stop(0) end)
+					current_anim_track = nil
+				end
+				local anim = Instance.new("Animation")
+				anim.AnimationId = id
+				local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
+				if ok and track then
+					track.Looped = true
+					track:Play()
+					current_anim_track = track
+				end
+			end
+			cfg.set_animation = play_animation
 
 			local items = cfg.items; do
 				items.viewportframe = library:create( "ViewportFrame" , {
