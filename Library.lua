@@ -5847,8 +5847,8 @@
 				})
 					
 				TextBox:GetPropertyChangedSignal("Text"):Connect(function()
-					flags[cfg.flag] = TextBox.text
-					cfg.callback(TextBox.text)
+					flags[cfg.flag] = TextBox.Text
+					cfg.callback(TextBox.Text)
 				end)
 			-- 
 
