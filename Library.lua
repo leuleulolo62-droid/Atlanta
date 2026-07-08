@@ -2493,7 +2493,12 @@
 				});
 
 				items.viewportframe.CurrentCamera = items.camera -- sick
-				character.Parent = items.viewportframe
+				-- A ViewportFrame's contents are otherwise just a static render
+				-- snapshot -- AnimationTracks report IsPlaying=true but never
+				-- actually advance (TimePosition stays 0) unless the rig lives
+				-- inside a WorldModel, which gets real per-frame simulation.
+				items.world_model = library:create("WorldModel", {Parent = items.viewportframe})
+				character.Parent = items.world_model
 
 				items.camera.CameraSubject = character
 
@@ -2949,7 +2954,7 @@
 					character.Animate:Destroy()
 				end
 
-				character.Parent = items.viewportframe
+				character.Parent = items.world_model
 				items.camera.CameraSubject = character
 				chams_highlight.Adornee = character
 				objects["name"].Text = string.format("%s (@%s)", new_player.DisplayName, new_player.Name)
