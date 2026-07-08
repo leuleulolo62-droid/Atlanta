@@ -86,7 +86,13 @@
 			{name = "Spectate", callback = function(player_obj)
 				local hum = player_obj.Character and player_obj.Character:FindFirstChildOfClass("Humanoid")
 				local cam = workspace.CurrentCamera
-				if hum and cam then
+				if not hum or not cam then return end
+				if cam.CameraSubject == hum then
+					-- Already spectating this player -- press Spectate again to return to yourself.
+					local my_hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
+					cam.CameraSubject = my_hum
+					cam.CameraType = Enum.CameraType.Custom
+				else
 					cam.CameraSubject = hum
 					cam.CameraType = Enum.CameraType.Track
 				end
