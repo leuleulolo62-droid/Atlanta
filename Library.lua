@@ -2946,6 +2946,7 @@
 				objects[ "healthbar" ].Size = UDim2.new(1, -2, multiplier, -2)
 				objects[ "healthbar" ].Position = UDim2.new(0, 1, 1 - multiplier, 1)
 				objects[ "healthbar" ].BackgroundColor3 = color
+				objects[ "health_text" ].Text = tostring(math.floor(multiplier * humanoid.MaxHealth))
 			end
 
 			function cfg.refresh_elements( )
@@ -2959,12 +2960,15 @@
 					["Weapon"] = objects[ "weapon" ];
 					["Distance_Color"] = {objects[ "distance" ]};
 					["Weapon_Color"] = {objects[ "weapon" ]};
+					["Team_Name"] = objects[ "team_name" ];
+					["Team_Name_Color"] = {objects[ "team_name" ]};
 				}
 
 				local color_defaults = {
 					["Name_Color"] = rgb(255, 255, 255);
 					["Distance_Color"] = rgb(200, 200, 200);
 					["Weapon_Color"] = rgb(200, 200, 200);
+					["Team_Name_Color"] = rgb(200, 200, 200);
 				}
 
 				for flag,object in temp do
@@ -2998,6 +3002,12 @@
 				for _, corner in objects[ "corners" ]:GetChildren() do
 					corner.Frame.BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 				end
+
+				objects[ "box_filled" ].Parent = fget("Box_Filled", false) and objects[ "holder" ] or library.cache
+				objects[ "box_filled" ].BackgroundColor3 = fcolor("Box_Filled_Color", rgb(255, 0, 0))
+
+				objects[ "health_text" ].Parent = fget("Health_Text", false) and objects[ "holder" ] or library.cache
+				objects[ "health_text" ].Text = tostring(math.floor(character.Humanoid.Health))
 
 				local chams_on = fget("Chams", false)
 				local chams_color = fcolor("Chams_Color", rgb(138, 43, 226))
