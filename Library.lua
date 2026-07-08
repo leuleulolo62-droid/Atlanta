@@ -3937,9 +3937,15 @@
 							end
 						end
 						if best then
+							-- LayoutOrder is an int on the real Instance (a
+							-- half-step here silently truncates), but the
+							-- indicator is purely cosmetic during the drag --
+							-- close enough to show the right gap. The actual
+							-- drop below re-sequences everyone with clean ints.
 							column_cfg.indicator.LayoutOrder = best_before and (best.LayoutOrder - 0.5) or (best.LayoutOrder + 0.5)
 							column_cfg.indicator.Visible = true
 							column_cfg.pending_target = best
+							column_cfg.pending_before = best_before
 						end
 					end
 				end)
@@ -3950,10 +3956,33 @@
 						drag_stroke.Enabled = false
 						column_cfg.indicator.Visible = false
 						local target = column_cfg.pending_target
-						if target and target.Parent then
-							section.LayoutOrder = column_cfg.indicator.LayoutOrder
+						if target and target.Parent and target ~= section then
+							-- Re-sequence every section in this column with
+							-- clean integer LayoutOrder values instead of
+							-- reusing the indicator's (possibly truncated)
+							-- half-step -- avoids ties/collisions accumulating
+							-- over repeated drags.
+							local ordered = {}
+							for _, sib in column_cfg.sections do
+								if sib.Parent and sib ~= section then
+									insert(ordered, sib)
+								end
+							end
+							table.sort(ordered, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
+							local insert_at = #ordered + 1
+							for i, sib in ordered do
+								if sib == target then
+									insert_at = column_cfg.pending_before and i or (i + 1)
+									break
+								end
+							end
+							table.insert(ordered, insert_at, section)
+							for i, sib in ordered do
+								sib.LayoutOrder = i
+							end
 						end
 						column_cfg.pending_target = nil
+						column_cfg.pending_before = nil
 					end
 				end)
 			end
