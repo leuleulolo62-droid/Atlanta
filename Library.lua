@@ -2880,8 +2880,58 @@
 						AutomaticSize = Enum.AutomaticSize.Y;
 						TextSize = 12;
 					});
-				--  
-			end 
+				--
+
+				-- Team name esp
+					objects[ "team_name" ] = library:create( "TextLabel" , {
+						FontFace = library.font;
+						TextColor3 = fcolor("Team_Name_Color", rgb(200, 200, 200));
+						BorderColor3 = rgb(0, 0, 0);
+						Text = "[ Team ]";
+						Parent = library.cache;
+						TextStrokeTransparency = 0;
+						Name = "\0";
+						Size = dim2(1, 0, 0, 0);
+						BackgroundTransparency = 1;
+						Position = dim2(0, 0, 1, 33);
+						BorderSizePixel = 0;
+						AutomaticSize = Enum.AutomaticSize.Y;
+						TextSize = 12;
+					});
+				--
+
+				-- Health text (numeric HP next to the bar)
+					objects[ "health_text" ] = library:create( "TextLabel" , {
+						FontFace = library.font;
+						TextColor3 = rgb(255, 255, 255);
+						BorderColor3 = rgb(0, 0, 0);
+						Text = "100";
+						Parent = library.cache;
+						TextStrokeTransparency = 0;
+						Name = "\0";
+						Size = dim2(0, 24, 0, 14);
+						BackgroundTransparency = 1;
+						AnchorPoint = vec2(1, 0);
+						Position = dim2(0, -5, 0, -16);
+						BorderSizePixel = 0;
+						TextSize = 12;
+					});
+				--
+
+				-- Filled box (translucent fill inside the outline)
+					objects[ "box_filled" ] = library:create( "Frame" , {
+						Parent = library.cache;
+						Name = "\0";
+						Position = dim2(0, 1, 0, 1);
+						BorderColor3 = rgb(0, 0, 0);
+						Size = dim2(1, -2, 1, -2);
+						BackgroundTransparency = 0.7;
+						BorderSizePixel = 0;
+						ZIndex = 0;
+						BackgroundColor3 = fcolor("Box_Filled_Color", rgb(255, 0, 0))
+					});
+				--
+			end
 
 			cfg.change_health = function()
 				if objects[ "healthbar_holder" ].Parent ~= objects[ "holder" ] then
