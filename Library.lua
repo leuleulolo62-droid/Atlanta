@@ -551,20 +551,28 @@
 		end
 
 		function library:create(instance, options)
-			local ins = Instance.new(instance) 
-			
-			for prop, value in next, options do 
+			local ins = Instance.new(instance)
+
+			for prop, value in next, options do
 				ins[prop] = value
 			end
-			
-			if instance == "TextLabel" or instance == "TextButton" or instance == "TextBox" then 	
+
+			if instance == "TextLabel" or instance == "TextButton" or instance == "TextBox" then
 				library:apply_theme(ins, "text", "TextColor3")
 				library:apply_stroke(ins)
-			elseif instance == "ScreenGui" then 
+				-- Roblox's default AutoLocalize=true lets the HOST GAME's own
+				-- LocalizationTable silently retranslate our text whenever it
+				-- happens to match one of the game's own strings (this is how
+				-- "Settings"/"Search"/"Delete"/etc turned into French on a
+				-- French-locale account -- verified live: it's Roblox's engine
+				-- doing it, not text we wrote in French). Force it off so this
+				-- UI always renders exactly the English text we set.
+				ins.AutoLocalize = false
+			elseif instance == "ScreenGui" then
 				insert(library.guis, ins)
 			end
-			
-			return ins 
+
+			return ins
 		end
 	-- 
 
