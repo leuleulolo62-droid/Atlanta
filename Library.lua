@@ -362,9 +362,9 @@
 		end
 
 		function library:draggify(frame)
-			local dragging = false 
+			local dragging = false
 			local start_size = frame.Position
-			local start 
+			local start
 
 			frame.InputBegan:Connect(function(input)
 				if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -372,11 +372,20 @@
 					-- the cursor, not just the topmost one -- a nested interactive
 					-- child (ESP/skin preview viewport with its own drag-to-rotate)
 					-- would otherwise ALSO drag this whole panel on the same click.
-					-- Only start the panel drag if this panel is genuinely the
-					-- topmost thing under the cursor.
-					local topHit = lp and lp:FindFirstChildOfClass("PlayerGui") and lp.PlayerGui:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)[1]
-					if topHit and topHit ~= frame and topHit:IsA("ViewportFrame") then
-						return
+					-- PlayerGui:GetGuiObjectsAtPosition() was tried here first, but
+					-- it's unusable for this: it returns the HOST GAME's own (often
+					-- invisible/transparent) HUD frames as the topmost hit almost
+					-- everywhere on screen, so "is the topmost hit a ViewportFrame"
+					-- was essentially never true. Checking our own descendants'
+					-- geometry directly is self-contained and immune to that.
+					local x, y = input.Position.X, input.Position.Y
+					for _, d in pairs(frame:GetDescendants()) do
+						if d:IsA("ViewportFrame") and d.Visible then
+							local pos, size = d.AbsolutePosition, d.AbsoluteSize
+							if x >= pos.X and x <= pos.X + size.X and y >= pos.Y and y <= pos.Y + size.Y then
+								return
+							end
+						end
 					end
 					dragging = true
 					start = input.Position
@@ -828,21 +837,6 @@
 		
 					library:apply_theme(items.UIGradient, "contrast", "Color") 
 					
-					-- Optional square logo badge to the left of the title text
-					-- (only the main window passes properties.logo through --
-					-- other panels built via this same factory just get nil/"").
-					local has_logo = options.logo and options.logo ~= ""
-					items.logo = library:create("ImageLabel", {
-						Parent = items.window_holder,
-						Name = "",
-						BackgroundTransparency = 1,
-						Image = options.logo or "",
-						Visible = has_logo,
-						Position = dim2(0, 2, 0, 3),
-						Size = dim2(0, 14, 0, 14),
-						ScaleType = Enum.ScaleType.Fit,
-					})
-
 					items.text = library:create("TextLabel", {
 						Parent = items.window_holder,
 						Name = "",
@@ -851,7 +845,7 @@
 						BorderColor3 = rgb(0, 0, 0),
 						Text = cfg.name,
 						BackgroundTransparency = 1,
-						Position = has_logo and dim2(0, 20, 0, 4) or dim2(0, 2, 0, 4),
+						Position = dim2(0, 2, 0, 4),
 						BorderSizePixel = 0,
 						AutomaticSize = Enum.AutomaticSize.XY,
 						TextSize = 12,
@@ -1782,7 +1776,6 @@
 					size = dim2(0, 604, 0, 628),
 					position = dim2(0, (camera.ViewportSize.X / 2) - 302 - 96, 0, (camera.ViewportSize.Y / 2) - 421 - 12),
 					image = "rbxassetid://98823308062942",
-					logo = properties and properties.logo,
 				})
 
 				local items = main_window.items
