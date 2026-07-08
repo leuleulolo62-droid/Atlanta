@@ -2221,6 +2221,19 @@
 		function library:esp_preview(properties)
 			local cfg = {items = {}, rotation = 0; objects = {}; player = properties.player or lp; dragging = false; frame_offset_y = 0; distance = 6}
 
+			-- esp_preview can be used standalone (no matching Enabled/Names/Box_Color/etc
+			-- flags registered elsewhere) so every flag read falls back to a sane default
+			-- instead of indexing nil and crashing preview construction.
+			local function fget(name, default)
+				local f = flags[name]
+				if f == nil then return default end
+				return f
+			end
+			local function fcolor(name, default)
+				local f = flags[name]
+				return (type(f) == "table" and f.Color) or default
+			end
+
 			local function compute_frame(char)
 				local root = char.PrimaryPart or char:FindFirstChild("HumanoidRootPart")
 				if not root then return 0, 6 end
@@ -2316,7 +2329,7 @@
 				objects[ "name" ] = library:create( "TextLabel" , {
 					FontFace = library.font;
 					Parent = library.cache;
-					TextColor3 = flags["Name_Color"].Color;
+					TextColor3 = fcolor("Name_Color", rgb(255, 255, 255));
 					BorderColor3 = rgb(0, 0, 0);
 					Text = string.format("%s (@%s)", cfg.player.DisplayName, cfg.player.Name);
 					Name = "\0";
@@ -2393,7 +2406,7 @@
 						BorderColor3 = rgb(0, 0, 0);
 						Size = dim2(1, -2, 1, -2);
 						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
+						BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 					});
 					
 					objects[ "2" ] = library:create( "Frame" , {
@@ -2412,7 +2425,7 @@
 						BorderColor3 = rgb(0, 0, 0);
 						Size = dim2(1, -2, 1, 1);
 						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
+						BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 					});
 					
 					objects[ "3" ] = library:create( "Frame" , {
@@ -2432,7 +2445,7 @@
 						BorderColor3 = rgb(0, 0, 0);
 						Size = dim2(1, -2, 1, -2);
 						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
+						BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 					});
 					
 					objects[ "4" ] = library:create( "Frame" , {
@@ -2452,7 +2465,7 @@
 						BorderColor3 = rgb(0, 0, 0);
 						Size = dim2(1, -2, 1, 1);
 						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
+						BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 					});
 					
 					objects[ "5" ] = library:create( "Frame" , {
@@ -2472,7 +2485,7 @@
 						BorderColor3 = rgb(0, 0, 0);
 						Size = dim2(1, -2, 1, -2);
 						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
+						BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 					});
 					
 					objects[ "6" ] = library:create( "Frame" , {
@@ -2493,7 +2506,7 @@
 						BorderColor3 = rgb(0, 0, 0);
 						Size = dim2(1, -2, 1, 1);
 						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
+						BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 					});
 					
 					objects[ "7" ] = library:create( "Frame" , {
@@ -2513,7 +2526,7 @@
 						BorderColor3 = rgb(0, 0, 0);
 						Size = dim2(1, -2, 1, -2);
 						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
+						BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 					});
 					
 					objects[ "7" ] = library:create( "Frame" , {
@@ -2534,7 +2547,7 @@
 						BorderColor3 = rgb(0, 0, 0);
 						Size = dim2(1, -2, 1, 1);
 						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
+						BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 					});
 				-- 
 				
@@ -2564,7 +2577,7 @@
 				-- Distance esp
 					objects[ "distance" ] = library:create( "TextLabel" , {
 						FontFace = library.font;
-						TextColor3 = flags["Distance_Color"].Color;
+						TextColor3 = fcolor("Distance_Color", rgb(200, 200, 200));
 						BorderColor3 = rgb(0, 0, 0);
 						Text = "127st";
 						Parent = library.cache;
@@ -2582,7 +2595,7 @@
 				-- Weapon esp
 					objects[ "weapon" ] = library:create( "TextLabel" , {
 						FontFace = library.font;
-						TextColor3 = flags["Weapon_Color"].Color;
+						TextColor3 = fcolor("Weapon_Color", rgb(200, 200, 200));
 						BorderColor3 = rgb(0, 0, 0);
 						Text = "[ Weapon ]";
 						Parent = library.cache;
@@ -2599,25 +2612,25 @@
 			end 
 
 			cfg.change_health = function()
-				if flags[ "healthbar_holder" ] and flags[ "healthbar_holder" ].Parent ~= objects[ "holder" ] then 
-					return 
+				if objects[ "healthbar_holder" ].Parent ~= objects[ "holder" ] then
+					return
 				end
 
 				local humanoid = character.Humanoid
-				
+
 				local multiplier = humanoid.MaxHealth * math.abs(math.sin(tick() * 2)) / humanoid.MaxHealth
-				local color = flags[ "Health_Low" ].Color:Lerp( flags["Health_High"].Color, multiplier)
-				
+				local color = fcolor("Health_Low", rgb(255, 0, 0)):Lerp(fcolor("Health_High", rgb(0, 255, 0)), multiplier)
+
 				objects[ "healthbar" ].Size = UDim2.new(1, -2, multiplier, -2)
 				objects[ "healthbar" ].Position = UDim2.new(0, 1, 1 - multiplier, 1)
 				objects[ "healthbar" ].BackgroundColor3 = color
-			end -- wtf why diff func defining
+			end
 
-			function cfg.refresh_elements( )                                
-				objects.holder.Parent = flags["Enabled"] and items.viewportframe or library.cache
+			function cfg.refresh_elements( )
+				objects.holder.Parent = fget("Enabled", true) and items.viewportframe or library.cache
 
 				local temp = {
-					["Names"] = objects["name"]; 
+					["Names"] = objects["name"];
 					["Name_Color"] = {objects["name"]};
 					["Healthbar"] = objects[ "healthbar_holder" ];
 					["Distance"] = objects[ "distance" ];
@@ -2626,38 +2639,46 @@
 					["Weapon_Color"] = {objects[ "weapon" ]};
 				}
 
-				for flag,object in temp do 
-					if type(object) == "table" then 
-						object[1].TextColor3 = flags[flag].Color
-					else 
-						object.Parent = flags[flag] and objects[ "holder" ] or library.cache
-					end
-				end 
-				
-				local is_corner = flags[ "Box_Type" ] == "Corner"
+				local color_defaults = {
+					["Name_Color"] = rgb(255, 255, 255);
+					["Distance_Color"] = rgb(200, 200, 200);
+					["Weapon_Color"] = rgb(200, 200, 200);
+				}
 
-				if flags["Boxes"] then 
-					if is_corner then 
+				for flag,object in temp do
+					if type(object) == "table" then
+						object[1].TextColor3 = fcolor(flag, color_defaults[flag])
+					else
+						object.Parent = fget(flag, true) and objects[ "holder" ] or library.cache
+					end
+				end
+
+				local is_corner = fget("Box_Type", "Corner") == "Corner"
+
+				if fget("Boxes", true) then
+					if is_corner then
 						objects[ "corners" ].Parent = objects["holder"]
 						objects[ "box_handler" ].Parent = library.cache
 						objects[ "box_outline" ].Parent = library.cache
-					else 
+					else
 						objects[ "box_handler" ].Parent = objects[ "holder" ]
 						objects[ "box_outline" ].Parent = objects[ "holder" ]
 						objects[ "corners" ].Parent = library.cache
-					end 
+					end
 				else
 					objects[ "corners" ].Parent =  library.cache
 					objects[ "box_handler" ].Parent = library.cache
 					objects[ "box_outline" ].Parent = library.cache
-				end 
+				end
 
-				objects[ "box_color" ].Color = flags["Box_Color"].Color 
+				objects[ "box_color" ].Color = fcolor("Box_Color", rgb(255, 0, 0))
 
 				for _, corner in objects[ "corners" ]:GetChildren() do
-					corner.Frame.BackgroundColor3 = flags["Box_Color"].Color
+					corner.Frame.BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 				end
 			end
+
+			cfg.refresh_elements()
 
 			task.spawn(function()
 				while true do
