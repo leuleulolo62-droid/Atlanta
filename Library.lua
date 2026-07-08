@@ -533,10 +533,10 @@
 			-- none currently are, and that's an acceptable tradeoff for not
 			-- needing a second id scheme just for this.
 			local section_order = {}
-			for _, column in library.reorderable_columns do
+			for col_i, column in library.reorderable_columns do
 				for i, section in column.sections do
 					if section.Parent then
-						section_order[column.section_names[i]] = section.LayoutOrder
+						section_order[column.section_names[i]] = {o = section.LayoutOrder, c = col_i}
 					end
 				end
 			end
@@ -558,10 +558,28 @@
 						end
 					end
 				elseif _ == "__section_order" then
-					for _, column in library.reorderable_columns do
-						for i, section in column.sections do
-							local order = v[column.section_names[i]]
-							if order then section.LayoutOrder = order end
+					for name, data in next, v do
+						-- old configs saved a plain LayoutOrder number here;
+						-- newer ones save {o = LayoutOrder, c = column index}
+						-- so a cross-column move survives a save/load too.
+						local order = type(data) == "table" and data.o or data
+						local col_i = type(data) == "table" and data.c or nil
+
+						for _, column in library.reorderable_columns do
+							for i, section in column.sections do
+								if column.section_names[i] == name then
+									local dest = col_i and library.reorderable_columns[col_i]
+									if dest and dest ~= column then
+										table.remove(column.sections, i)
+										table.remove(column.section_names, i)
+										section.Parent = dest.holder
+										insert(dest.sections, section)
+										insert(dest.section_names, name)
+									end
+									if order then section.LayoutOrder = order end
+									break
+								end
+							end
 						end
 					end
 				else
@@ -3908,8 +3926,13 @@
 					Enabled = false,
 				})
 
-				local column_cfg = self
+				-- owner.col is the column this section CURRENTLY lives in --
+				-- kept in a table (not a plain local) because a cross-column
+				-- move below reassigns it, and this same closure has to see
+				-- the new value on the section's next drag.
+				local owner = {col = self}
 				local dragging = false
+				local pending_target, pending_before, pending_col = nil, true, nil
 
 				text.Active = true
 				text:SetAttribute("_dragHandle", true)
@@ -3922,9 +3945,26 @@
 
 				library:connection(uis.InputChanged, function(input)
 					if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-						local mouse_y = input.Position.Y
+						local mouse_x, mouse_y = input.Position.X, input.Position.Y
+
+						-- A groupbox's title can be dropped on the OTHER
+						-- column of the same tab (left<->right), not just
+						-- reordered within its own -- pick whichever
+						-- reorderable column under the same parent the
+						-- cursor is horizontally over.
+						local target_col = owner.col
+						for _, other in library.reorderable_columns do
+							if other.holder.Parent == owner.col.holder.Parent then
+								local pos, size = other.holder.AbsolutePosition, other.holder.AbsoluteSize
+								if mouse_x >= pos.X and mouse_x <= pos.X + size.X then
+									target_col = other
+									break
+								end
+							end
+						end
+
 						local best, best_before, best_dist = nil, true, math.huge
-						for _, sib in column_cfg.sections do
+						for _, sib in target_col.sections do
 							if sib.Parent and sib ~= section then
 								local pos, size = sib.AbsolutePosition, sib.AbsoluteSize
 								local mid = pos.Y + size.Y / 2
@@ -3936,17 +3976,20 @@
 								end
 							end
 						end
-						if best then
-							-- LayoutOrder is an int on the real Instance (a
-							-- half-step here silently truncates), but the
-							-- indicator is purely cosmetic during the drag --
-							-- close enough to show the right gap. The actual
-							-- drop below re-sequences everyone with clean ints.
-							column_cfg.indicator.LayoutOrder = best_before and (best.LayoutOrder - 0.5) or (best.LayoutOrder + 0.5)
-							column_cfg.indicator.Visible = true
-							column_cfg.pending_target = best
-							column_cfg.pending_before = best_before
+
+						-- LayoutOrder is an int on the real Instance (a
+						-- half-step here silently truncates), but the
+						-- indicator is purely cosmetic during the drag --
+						-- close enough to show the right gap. The actual
+						-- drop below re-sequences everyone with clean ints.
+						target_col.indicator.LayoutOrder = best and (best_before and (best.LayoutOrder - 0.5) or (best.LayoutOrder + 0.5)) or 0.5
+						target_col.indicator.Visible = true
+						for _, col in library.reorderable_columns do
+							if col ~= target_col then col.indicator.Visible = false end
 						end
+						pending_target = best
+						pending_before = best_before
+						pending_col = target_col
 					end
 				end)
 
@@ -3954,35 +3997,53 @@
 					if dragging and input.UserInputType == Enum.UserInputType.MouseButton1 then
 						dragging = false
 						drag_stroke.Enabled = false
-						column_cfg.indicator.Visible = false
-						local target = column_cfg.pending_target
-						if target and target.Parent and target ~= section then
-							-- Re-sequence every section in this column with
-							-- clean integer LayoutOrder values instead of
-							-- reusing the indicator's (possibly truncated)
-							-- half-step -- avoids ties/collisions accumulating
-							-- over repeated drags.
-							local ordered = {}
-							for _, sib in column_cfg.sections do
-								if sib.Parent and sib ~= section then
-									insert(ordered, sib)
-								end
-							end
-							table.sort(ordered, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
-							local insert_at = #ordered + 1
-							for i, sib in ordered do
-								if sib == target then
-									insert_at = column_cfg.pending_before and i or (i + 1)
+						for _, col in library.reorderable_columns do col.indicator.Visible = false end
+
+						local dest = pending_col or owner.col
+						if dest ~= owner.col then
+							local src = owner.col
+							for i, sib in src.sections do
+								if sib == section then
+									table.remove(src.sections, i)
+									table.remove(src.section_names, i)
 									break
 								end
 							end
-							table.insert(ordered, insert_at, section)
-							for i, sib in ordered do
-								sib.LayoutOrder = i
+							section.Parent = dest.holder
+							insert(dest.sections, section)
+							insert(dest.section_names, cfg.name)
+							owner.col = dest
+						end
+
+						-- Re-sequence every section in the destination column
+						-- with clean integer LayoutOrder values instead of
+						-- reusing the indicator's (possibly truncated)
+						-- half-step -- avoids ties/collisions accumulating
+						-- over repeated drags.
+						local ordered = {}
+						for _, sib in dest.sections do
+							if sib.Parent and sib ~= section then
+								insert(ordered, sib)
 							end
 						end
-						column_cfg.pending_target = nil
-						column_cfg.pending_before = nil
+						table.sort(ordered, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
+						local insert_at = #ordered + 1
+						if pending_target and pending_target.Parent then
+							for i, sib in ordered do
+								if sib == pending_target then
+									insert_at = pending_before and i or (i + 1)
+									break
+								end
+							end
+						end
+						table.insert(ordered, insert_at, section)
+						for i, sib in ordered do
+							sib.LayoutOrder = i
+						end
+
+						pending_target = nil
+						pending_before = true
+						pending_col = nil
 					end
 				end)
 			end
