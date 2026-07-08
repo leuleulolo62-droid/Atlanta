@@ -2525,7 +2525,20 @@
 						cfg.rotation += 0.5
 					end
 					character:SetPrimaryPartCFrame(cfr(Vector3.new(0, 1 - cfg.frame_offset_y, -cfg.distance)) * angle(0, math.rad(cfg.rotation), 0))
+
+					if aura_on then
+						local root = character.PrimaryPart or character:FindFirstChild("HumanoidRootPart")
+						if root then
+							local n = #aura_orbs
+							for i, orb in aura_orbs do
+								local a = (tick() * 2) + (i / n) * (math.pi * 2)
+								orb.CFrame = root.CFrame * cfr(math.cos(a) * 1.4, math.sin(tick() * 3 + i) * 0.3, math.sin(a) * 1.4)
+							end
+						end
+					end
 				end)
+
+				play_animation(cfg.current_anim_kind)
 			end
 
 			local objects = cfg.objects; do 
@@ -2904,6 +2917,8 @@
 				apply_chams_tint(chams_on, chams_color)
 
 				update_china_hat(fget("ChinaHat", false), fcolor("ChinaHat_Color", rgb(255, 0, 0)))
+
+				update_aura(fget("Aura", false), fcolor("Aura_Color1", rgb(255, 110, 0)), fcolor("Aura_Color2", rgb(255, 0, 0)))
 			end
 
 			cfg.refresh_elements()
@@ -2938,6 +2953,7 @@
 				objects["name"].Text = string.format("%s (@%s)", new_player.DisplayName, new_player.Name)
 				cfg.frame_offset_y, cfg.distance = compute_frame(character)
 				cfg.refresh_elements()
+				play_animation(cfg.current_anim_kind)
 
 				old_character:Destroy()
 			end
