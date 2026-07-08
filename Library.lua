@@ -2305,30 +2305,11 @@
 				Enabled = false;
 			})
 
-			-- Highlight instances don't render inside ViewportFrame (a platform
-			-- limitation, not a config bug) -- so Chams needs a second, real
-			-- technique for the preview: tint the clone's parts directly.
-			-- Original colors are stashed via attribute so toggling off restores them.
-			local function apply_chams_tint(on, color)
-				for _, part in character:GetDescendants() do
-					if part:IsA("BasePart") then
-						if on then
-							if part:GetAttribute("_chamsOrigColor") == nil then
-								part:SetAttribute("_chamsOrigColor", part.Color)
-							end
-							part.Color = color
-							part.Material = Enum.Material.Neon
-						else
-							local orig = part:GetAttribute("_chamsOrigColor")
-							if orig then part.Color = orig; part:SetAttribute("_chamsOrigColor", nil) end
-							part.Material = Enum.Material.SmoothPlastic
-						end
-					end
-				end
-			end
-
 			-- China Hat preview: a real Part+SpecialMesh (unlike Highlight, this
-			-- DOES render in a ViewportFrame), welded above the clone's head.
+			-- DOES render in a ViewportFrame), positioned above the clone's head.
+			-- Declared before apply_chams_tint so that closure can skip it by
+			-- identity (it's a BasePart under `character` once shown, and the
+			-- tint loop would otherwise repaint/attribute-pollute it too).
 			local china_hat = library:create("Part", {
 				Parent = library.cache;
 				Name = "\0";
@@ -2346,6 +2327,29 @@
 				MeshId = "rbxassetid://1033714";
 				Scale = vec3(2, 0.8, 2);
 			})
+
+			-- Highlight instances don't render inside ViewportFrame (a platform
+			-- limitation, not a config bug) -- so Chams needs a second, real
+			-- technique for the preview: tint the clone's parts directly.
+			-- Original colors are stashed via attribute so toggling off restores them.
+			local function apply_chams_tint(on, color)
+				for _, part in character:GetDescendants() do
+					if part:IsA("BasePart") and part ~= china_hat then
+						if on then
+							if part:GetAttribute("_chamsOrigColor") == nil then
+								part:SetAttribute("_chamsOrigColor", part.Color)
+							end
+							part.Color = color
+							part.Material = Enum.Material.Neon
+						else
+							local orig = part:GetAttribute("_chamsOrigColor")
+							if orig then part.Color = orig; part:SetAttribute("_chamsOrigColor", nil) end
+							part.Material = Enum.Material.SmoothPlastic
+						end
+					end
+				end
+			end
+
 			local function update_china_hat(on, color)
 				local head = character:FindFirstChild("Head")
 				if on and head then
