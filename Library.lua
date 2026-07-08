@@ -79,6 +79,7 @@
 		config_flags = {},
 		visible_flags = {}, 
 		guis = {},
+		panels = {},
 		connections = {},
 		notifications = {},
 		playerlist_data = {},
@@ -487,7 +488,7 @@
 
 		function library:get_config()
 			local Config = {}
-		
+
 			for _, v in flags do
 				if type(v) == "table" and v.key then
 					Config[_] = {active = v.active, mode = v.mode, key = tostring(v.key)}
@@ -496,28 +497,54 @@
 				else
 					Config[_] = v
 				end
-			end 
-			
+			end
+
+			-- Dock panels are dragged/resized directly (Position/Size, not a
+			-- flag), so they'd otherwise reset to their spawn spot on every
+			-- load. Piggyback their layout on the same save under one key.
+			local panel_layout = {}
+			for name, frame in library.panels do
+				if frame and frame.Parent then
+					panel_layout[name] = {
+						frame.Position.X.Scale, frame.Position.X.Offset,
+						frame.Position.Y.Scale, frame.Position.Y.Offset,
+						frame.Size.X.Scale, frame.Size.X.Offset,
+						frame.Size.Y.Scale, frame.Size.Y.Offset,
+					}
+				end
+			end
+			Config.__panel_layout = panel_layout
+
 			return http_service:JSONEncode(Config)
 		end
 
-		function library:load_config(config_json) 
+		function library:load_config(config_json)
 			local config = http_service:JSONDecode(config_json)
-		
-			for _, v in next, config do 
-				local function_set = library.config_flags[_]
-				
-				if function_set then 
-					if type(v) == "table" and v["Transparency"] and v["Color"] then
-						function_set(hex(v["Color"]), v["Transparency"])
-					elseif type(v) == "table" and v["active"] then 
-						function_set(v)
-					else 
-						function_set(v)
+
+			for _, v in next, config do
+				if _ == "__panel_layout" then
+					for name, p in next, v do
+						local frame = library.panels[name]
+						if frame then
+							frame.Position = dim2(p[1], p[2], p[3], p[4])
+							frame.Size = dim2(p[5], p[6], p[7], p[8])
+						end
 					end
-				end 
-			end 
-		end 
+				else
+					local function_set = library.config_flags[_]
+
+					if function_set then
+						if type(v) == "table" and v["Transparency"] and v["Color"] then
+							function_set(hex(v["Color"]), v["Transparency"])
+						elseif type(v) == "table" and v["active"] then
+							function_set(v)
+						else
+							function_set(v)
+						end
+					end
+				end
+			end
+		end
 		
 		function library:round(number, float) 
 			local multiplier = 1 / (float or 1)
@@ -716,6 +743,7 @@
 					})
 					library:draggify(items.main_holder)
 					library:make_resizable(items.main_holder)
+					library.panels[cfg.name] = items.main_holder
 
 					local Close = library:create( "TextButton" , {
 						Parent = items.main_holder;
