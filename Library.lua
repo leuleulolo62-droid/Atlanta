@@ -2305,6 +2305,58 @@
 				Enabled = false;
 			})
 
+			-- Highlight instances don't render inside ViewportFrame (a platform
+			-- limitation, not a config bug) -- so Chams needs a second, real
+			-- technique for the preview: tint the clone's parts directly.
+			-- Original colors are stashed via attribute so toggling off restores them.
+			local function apply_chams_tint(on, color)
+				for _, part in character:GetDescendants() do
+					if part:IsA("BasePart") then
+						if on then
+							if part:GetAttribute("_chamsOrigColor") == nil then
+								part:SetAttribute("_chamsOrigColor", part.Color)
+							end
+							part.Color = color
+							part.Material = Enum.Material.Neon
+						else
+							local orig = part:GetAttribute("_chamsOrigColor")
+							if orig then part.Color = orig; part:SetAttribute("_chamsOrigColor", nil) end
+							part.Material = Enum.Material.SmoothPlastic
+						end
+					end
+				end
+			end
+
+			-- China Hat preview: a real Part+SpecialMesh (unlike Highlight, this
+			-- DOES render in a ViewportFrame), welded above the clone's head.
+			local china_hat = library:create("Part", {
+				Parent = library.cache;
+				Name = "\0";
+				Size = vec3(0.2, 1.6, 0.2);
+				Anchored = false;
+				CanCollide = false;
+				CanQuery = false;
+				CanTouch = false;
+				Color = rgb(255, 0, 0);
+				Material = Enum.Material.Neon;
+			})
+			local china_hat_mesh = library:create("SpecialMesh", {
+				Parent = china_hat;
+				MeshType = Enum.MeshType.FileMesh;
+				MeshId = "rbxassetid://1033714";
+				Scale = vec3(2, 0.8, 2);
+			})
+			local function update_china_hat(on, color)
+				local head = character:FindFirstChild("Head")
+				if on and head then
+					china_hat.Parent = character
+					china_hat.Color = color
+					china_hat.CFrame = head.CFrame * cfr(0, 1, 0)
+				else
+					china_hat.Parent = library.cache
+				end
+			end
+
 			local items = cfg.items; do
 				items.viewportframe = library:create( "ViewportFrame" , {
 					Parent = self.holder;
@@ -2731,8 +2783,13 @@
 					corner.Frame.BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 				end
 
-				chams_highlight.Enabled = fget("Chams", false)
-				chams_highlight.FillColor = fcolor("Chams_Color", rgb(138, 43, 226))
+				local chams_on = fget("Chams", false)
+				local chams_color = fcolor("Chams_Color", rgb(138, 43, 226))
+				chams_highlight.Enabled = chams_on
+				chams_highlight.FillColor = chams_color
+				apply_chams_tint(chams_on, chams_color)
+
+				update_china_hat(fget("ChinaHat", false), fcolor("ChinaHat_Color", rgb(255, 0, 0)))
 			end
 
 			cfg.refresh_elements()
