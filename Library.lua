@@ -369,17 +369,20 @@
 				if input.UserInputType == Enum.UserInputType.MouseButton1 then
 					-- Roblox fires InputBegan on every overlapping GuiObject under
 					-- the cursor, not just the topmost one -- a nested interactive
-					-- child (ESP/skin preview viewport with its own drag-to-rotate)
-					-- would otherwise ALSO drag this whole panel on the same click.
+					-- child (ESP/skin preview viewport with its own drag-to-rotate,
+					-- or a groupbox title with drag-to-reorder) would otherwise
+					-- ALSO drag this whole panel on the same click.
 					-- PlayerGui:GetGuiObjectsAtPosition() was tried here first, but
 					-- it's unusable for this: it returns the HOST GAME's own (often
 					-- invisible/transparent) HUD frames as the topmost hit almost
 					-- everywhere on screen, so "is the topmost hit a ViewportFrame"
 					-- was essentially never true. Checking our own descendants'
-					-- geometry directly is self-contained and immune to that.
+					-- geometry directly is self-contained and immune to that --
+					-- and, unlike a flag set inside the child's own InputBegan,
+					-- doesn't depend on which instance's InputBegan fires first.
 					local x, y = input.Position.X, input.Position.Y
 					for _, d in pairs(frame:GetDescendants()) do
-						if d:IsA("ViewportFrame") and d.Visible then
+						if (d:IsA("ViewportFrame") or d:GetAttribute("_dragHandle")) and d.Visible then
 							local pos, size = d.AbsolutePosition, d.AbsoluteSize
 							if x >= pos.X and x <= pos.X + size.X and y >= pos.Y and y <= pos.Y + size.Y then
 								return
@@ -3909,6 +3912,7 @@
 				local dragging = false
 
 				text.Active = true
+				text:SetAttribute("_dragHandle", true)
 				text.InputBegan:Connect(function(input)
 					if input.UserInputType == Enum.UserInputType.MouseButton1 then
 						dragging = true
