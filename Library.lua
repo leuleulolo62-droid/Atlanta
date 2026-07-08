@@ -83,11 +83,12 @@
 		notifications = {},
 		playerlist_data = {},
 		playerlist_actions = {
-			{name = "Teleport To", callback = function(player_obj)
-				local target_root = player_obj.Character and player_obj.Character:FindFirstChild("HumanoidRootPart")
-				local my_root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-				if target_root and my_root then
-					my_root.CFrame = target_root.CFrame + vec3(0, 3, 0)
+			{name = "Spectate", callback = function(player_obj)
+				local hum = player_obj.Character and player_obj.Character:FindFirstChildOfClass("Humanoid")
+				local cam = workspace.CurrentCamera
+				if hum and cam then
+					cam.CameraSubject = hum
+					cam.CameraType = Enum.CameraType.Track
 				end
 			end}
 		},
@@ -1806,13 +1807,8 @@
 					image = "rbxassetid://115194686863276",
 				})
 
-				local watermark = library:watermark({default = os.date('Atlanta |  - %b %d %Y - %H:%M:%S')})  
-
-				task.spawn(function()
-					while task.wait(1) do 
-						watermark.change_text(os.date('Atlanta - Beta - %b %d %Y - %H:%M:%S'))
-					end 
-				end) 
+				local watermark = library:watermark({default = os.date('Atlanta |  - %b %d %Y - %H:%M:%S')})
+				window.watermark = watermark -- exposed so a caller script can drive its own text (FPS/ping/title/etc) without a second watermark fighting this one
 
 				local items = style.items
 
@@ -1897,13 +1893,10 @@
 				section:button({name = "Join New Server", callback = function()
 					local apiRequest = game:GetService("HttpService"):JSONDecode(game:HttpGetAsync("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
 					local data = apiRequest.data[random(1, #apiRequest.data)]
-						
-					if data.playing <= flags["max_players"] then 
-						game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, data.id)
-					end 
+
+					game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, data.id)
 				end})
-				section:slider({name = "Max Players", flag = "max_players", min = 0, max = 40, default = 15, interval = 1})
-			-- 
+			--
 
 			-- cfg holder
 				local holder = library:panel({
@@ -2057,6 +2050,18 @@
 						BorderSizePixel = 0,
 						BackgroundColor3 = themes.preset.accent
 					}) library:apply_theme(note_flag, "accent", "BackgroundColor3")
+
+					-- items.Icon's ImageColor3 dims/brightens on open/close (see the
+					-- sgui Enabled connection in library:panel) — these plain Frames
+					-- need the same treatment or the icon looks permanently "active".
+					local function sync_note_color()
+						local color = music_holder.items.sgui.Enabled and themes.preset.accent or themes.preset.inline
+						note_head.BackgroundColor3 = color
+						note_stem.BackgroundColor3 = color
+						note_flag.BackgroundColor3 = color
+					end
+					music_holder.items.sgui:GetPropertyChangedSignal("Enabled"):Connect(sync_note_color)
+					sync_note_color()
 				end
 
 				local music_items = music_holder.items
