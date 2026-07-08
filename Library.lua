@@ -1370,6 +1370,15 @@
 			end
 			window.set_background_fx = set_background_fx
 
+			local function set_fx_color(kind, color)
+				local preset = fx_presets[kind]
+				if not preset then return end
+				for _, particle in preset.particles do
+					particle.instance.BackgroundColor3 = color
+				end
+			end
+			window.set_fx_color = set_fx_color
+
 			local fx_connection;
 			local function set_fx_enabled(bool)
 				fx_gui.Enabled = bool
@@ -1864,6 +1873,9 @@
 				section:dropdown({name = "Background FX", items = {"None", "Snow", "Rain", "Stars"}, default = "Snow", flag = "background_fx", callback = function(text)
 					window.set_background_fx(text)
 				end})
+				section:label({name = "Snow Color"}):colorpicker({name = "Snow Color", color = rgb(255, 255, 255), flag = "background_fx_snow_color", callback = function(color) window.set_fx_color("Snow", color) end})
+				section:label({name = "Rain Color"}):colorpicker({name = "Rain Color", color = rgb(180, 200, 220), flag = "background_fx_rain_color", callback = function(color) window.set_fx_color("Rain", color) end})
+				section:label({name = "Star Color"}):colorpicker({name = "Star Color", color = rgb(255, 255, 255), flag = "background_fx_star_color", callback = function(color) window.set_fx_color("Stars", color) end})
 				local section = column:section({name = "Other"})
 				section:label({name = "UI Bind"})
 				:keybind({callback = window.set_menu_visibility, key = Enum.KeyCode.Insert})
