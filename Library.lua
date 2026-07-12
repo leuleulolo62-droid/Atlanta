@@ -2055,20 +2055,23 @@
 					-- TeleportToPlaceInstance to the SAME JobId you're already in is
 					-- often rejected. Alone -> Kick+Teleport (fresh instance); with
 					-- others -> back into the same instance.
-					if #players:GetPlayers() <= 1 then
-						lp:Kick("\nRejoining...")
-						task.wait()
-						ts:Teleport(game.PlaceId, lp)
-					else
-						ts:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
-					end
+					local ok = pcall(function()
+						if #players:GetPlayers() > 1 then
+							ts:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
+						else
+							ts:Teleport(game.PlaceId, lp)
+						end
+					end)
+					if not ok then pcall(function() ts:Teleport(game.PlaceId, lp) end) end
 				end})
 				section:button_holder({})
 				section:button({name = "Join New Server", callback = function()
-					local ok, res = pcall(function()
-						return game:GetService("HttpService"):JSONDecode(game:HttpGetAsync("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"))
-					end)
-					if not ok or type(res) ~= "table" or not res.data then return end
+					local raw
+					pcall(function() raw = game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100") end)
+					if not raw then pcall(function() raw = game:HttpGetAsync("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100") end) end
+					local res
+					pcall(function() res = game:GetService("HttpService"):JSONDecode(raw) end)
+					if type(res) ~= "table" or not res.data then return end
 					-- Skip the current server + full servers (the old code could pick
 					-- either, so nothing happened).
 					local candidates = {}
@@ -2078,77 +2081,68 @@
 						end
 					end
 					if #candidates > 0 then
-						game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, candidates[random(1, #candidates)], lp)
+						pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, candidates[random(1, #candidates)], lp) end)
 					end
 				end})
 
-				-- Custom cursor: toggle lives in the Style panel; the drawn cursor
-				-- (arrow, hand when hovering a button) is coloured by the theme Accent.
+				-- Custom cursor: toggles in the Style panel. A clean drawn arrow
+				-- (accent outline + black fill), shown when the menu mouse is free.
 				local cursor_section = column:section({name = "Cursor"})
 				cursor_section:toggle({name = "Custom Cursor", flag = "custom_cursor", callback = function(bool)
 					library.custom_cursor = bool
+					if not bool then pcall(function() game:GetService("UserInputService").MouseIconEnabled = true end) end
+				end})
+				cursor_section:toggle({name = "Hide Win Cursor", flag = "hide_win_cursor", callback = function(bool)
+					library.hide_win_cursor = bool
 					if not bool then pcall(function() game:GetService("UserInputService").MouseIconEnabled = true end) end
 				end})
 				if Drawing and type(Drawing.new) == "function" then
 					local UIS = game:GetService("UserInputService")
 					local RunS = game:GetService("RunService")
 					local BLACK = Color3.new(0, 0, 0)
-					local objs = {}
-					local function mk(t, z) local d = Drawing.new(t) d.Filled = true d.ZIndex = z objs[#objs+1] = d return d end
-					local aOut, aFill = mk("Triangle", 1), mk("Triangle", 2)
-					local handOut, handFill = {}, {}
-					for i = 1, 3 do handOut[i] = mk("Square", 1) handFill[i] = mk("Square", 2) end
-					local function hideAll() for _, d in ipairs(objs) do pcall(function() d.Visible = false end) end end
-					local btnCache, nextScan = {}, 0
-					local function overBtn(mx, my)
-						if os.clock() >= nextScan then
-							nextScan = os.clock() + 0.4
-							btnCache = {}
-							local roots = {}
-							local ok, hui = pcall(function() return gethui() end)
-							if ok and hui then roots[#roots + 1] = hui end
-							roots[#roots + 1] = game:GetService("CoreGui")
-							for _, r in ipairs(roots) do
-								pcall(function() for _, d in ipairs(r:GetDescendants()) do if d:IsA("GuiButton") then btnCache[#btnCache + 1] = d end end end)
-							end
-						end
-						for _, d in ipairs(btnCache) do
-							local hit = false
-							pcall(function()
-								if d.Visible and d.AbsoluteSize.X > 0 then
-									local ap, sz = d.AbsolutePosition, d.AbsoluteSize
-									hit = mx >= ap.X and mx <= ap.X + sz.X and my >= ap.Y and my <= ap.Y + sz.Y
-								end
-							end)
-							if hit then return true end
-						end
-						return false
+					-- Real cursor-arrow polygon (offsets from the tip), triangulated:
+					-- arrowhead pentagon + tail quad = 5 triangles. The outline is the
+					-- same shape scaled out from its centroid, drawn behind the fill.
+					local PTS = {
+						Vector2.new(0, 0), Vector2.new(0, 16), Vector2.new(3.5, 12.5),
+						Vector2.new(6, 18), Vector2.new(8.5, 17), Vector2.new(5.5, 11), Vector2.new(11.5, 11),
+					}
+					local TRIS = { {1, 2, 3}, {1, 3, 6}, {1, 6, 7}, {3, 4, 5}, {3, 5, 6} }
+					local cx, cy = 0, 0
+					for _, v in ipairs(PTS) do cx = cx + v.X cy = cy + v.Y end
+					local centroid = Vector2.new(cx / #PTS, cy / #PTS)
+					local outPTS = {}
+					for i, v in ipairs(PTS) do outPTS[i] = centroid + (v - centroid) * 1.2 end
+					local outTris, fillTris = {}, {}
+					for i = 1, #TRIS do
+						local o = Drawing.new("Triangle") o.Filled = true o.ZIndex = 1 outTris[i] = o
+						local f = Drawing.new("Triangle") f.Filled = true f.ZIndex = 2 fillTris[i] = f
+					end
+					local function hideAll()
+						for i = 1, #TRIS do pcall(function() outTris[i].Visible = false fillTris[i].Visible = false end) end
 					end
 					local hidOS = false
 					RunS:BindToRenderStep("Atlanta_Cursor", Enum.RenderPriority.Last.Value + 4, function()
-						local show = library.custom_cursor and UIS.MouseBehavior ~= Enum.MouseBehavior.LockCenter
-						if not show then
-							if hidOS then pcall(function() UIS.MouseIconEnabled = true end) hidOS = false end
-							hideAll() return
-						end
-						if UIS.MouseIconEnabled then UIS.MouseIconEnabled = false end
-						hidOS = true
-						local col = themes.preset.accent or Color3.fromRGB(96, 120, 190)
-						local m = UIS:GetMouseLocation()
-						local p = Vector2.new(m.X, m.Y)
-						if overBtn(m.X, m.Y) then
-							aOut.Visible = false aFill.Visible = false
-							local parts = { {2, 7, 6, 10}, {2, 0, 3, 9}, {7, 4, 3, 7} }
-							for i, r in ipairs(parts) do
-								local pos = p + Vector2.new(r[1], r[2])
-								handOut[i].Position = pos - Vector2.new(2, 2) handOut[i].Size = Vector2.new(r[3] + 4, r[4] + 4) handOut[i].Color = col handOut[i].Visible = true
-								handFill[i].Position = pos handFill[i].Size = Vector2.new(r[3], r[4]) handFill[i].Color = BLACK handFill[i].Visible = true
+						local free = UIS.MouseBehavior ~= Enum.MouseBehavior.LockCenter
+						if library.custom_cursor and free then
+							if UIS.MouseIconEnabled then UIS.MouseIconEnabled = false end
+							hidOS = true
+							local col = themes.preset.accent or Color3.fromRGB(96, 120, 190)
+							local m = UIS:GetMouseLocation()
+							local p = Vector2.new(m.X, m.Y)
+							for i, t in ipairs(TRIS) do
+								local o, f = outTris[i], fillTris[i]
+								o.PointA = p + outPTS[t[1]] o.PointB = p + outPTS[t[2]] o.PointC = p + outPTS[t[3]] o.Color = col o.Visible = true
+								f.PointA = p + PTS[t[1]] f.PointB = p + PTS[t[2]] f.PointC = p + PTS[t[3]] f.Color = BLACK f.Visible = true
 							end
-						else
-							for i = 1, 3 do handOut[i].Visible = false handFill[i].Visible = false end
-							local A, B, C = p, p + Vector2.new(0, 17), p + Vector2.new(12, 12)
-							aOut.PointA = A + Vector2.new(-2, -2) aOut.PointB = B + Vector2.new(-2, 4) aOut.PointC = C + Vector2.new(4, 2) aOut.Color = col aOut.Visible = true
-							aFill.PointA = A aFill.PointB = B aFill.PointC = C aFill.Color = BLACK aFill.Visible = true
+							return
+						end
+						hideAll()
+						if hidOS then pcall(function() UIS.MouseIconEnabled = true end) hidOS = false end
+						-- Hide Win Cursor: hide the OS arrow while the mouse is locked
+						-- (in-game); leave it when free so you can still click menus.
+						if library.hide_win_cursor and not free then
+							pcall(function() UIS.MouseIconEnabled = false end)
 						end
 					end)
 				end
