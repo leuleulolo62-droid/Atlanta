@@ -2707,6 +2707,36 @@
 					local charPos = Vector3.new(0, 1 - cfg.frame_offset_y, 0)
 					local camPos = charPos + (angle(0, math.rad(cfg.rotation), 0) * Vector3.new(0, 0, -cfg.distance * cfg.zoom))
 					items.camera.CFrame = cfr(camPos, charPos)
+						-- Skeleton preview: thin Neon parts connecting the clone's R6
+						-- joint centres, following the Walk/Jump animation. Lazy-built once.
+						if not cfg._skel then
+							cfg._skel = {}
+							cfg._skel_pairs = { {"Head", "Torso"}, {"Torso", "Left Arm"}, {"Torso", "Right Arm"}, {"Torso", "Left Leg"}, {"Torso", "Right Leg"} }
+							for i = 1, #cfg._skel_pairs do
+								cfg._skel[i] = library:create("Part", {
+									Parent = library.cache; Name = "\0";
+									Anchored = true; CanCollide = false; CanQuery = false; CanTouch = false;
+									Material = Enum.Material.Neon; Color = rgb(255, 255, 255); Size = vec3(0.12, 0.12, 1);
+								})
+							end
+						end
+						do
+							local show = fget("Skeleton", false)
+							local color = fcolor("Skeleton_Color", rgb(255, 255, 255))
+							for i, pr in ipairs(cfg._skel_pairs) do
+								local a, b = character:FindFirstChild(pr[1]), character:FindFirstChild(pr[2])
+								local bone = cfg._skel[i]
+								if show and a and b then
+									local pa, pb = a.Position, b.Position
+									bone.Size = vec3(0.12, 0.12, (pb - pa).Magnitude)
+									bone.CFrame = cfr((pa + pb) / 2, pb)
+									bone.Color = color
+									if bone.Parent ~= items.world_model then bone.Parent = items.world_model end
+								elseif bone.Parent ~= library.cache then
+									bone.Parent = library.cache
+								end
+							end
+						end
 				end)
 
 				play_animation(cfg.current_anim_kind)
