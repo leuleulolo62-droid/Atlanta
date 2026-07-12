@@ -2022,11 +2022,18 @@
 				end})
 				section:button_holder({})
 				section:button({name = "Panic", callback = function()
-					-- Disable every cheat toggle (the loader script populates the
-					-- shared getgenv().Toggles) and close the menu.
-					local Toggles = getgenv().Toggles
-					if Toggles then
-						for _, t in pairs(Toggles) do pcall(function() if t.Value then t:SetValue(false) end end) end
+					-- Full kill: the loader script exposes getgenv().S43_Panic, which
+					-- turns off every toggle, reverts the character morph, and
+					-- restores the anti-aim hooks + settings. Fall back to just
+					-- clearing toggles if that hook isn't present.
+					local panic = getgenv().S43_Panic
+					if type(panic) == "function" then
+						pcall(panic)
+					else
+						local Toggles = getgenv().Toggles
+						if Toggles then
+							for _, t in pairs(Toggles) do pcall(function() if t.Value then t:SetValue(false) end end) end
+						end
 					end
 					pcall(function() window.set_menu_visibility(false) end)
 				end})
