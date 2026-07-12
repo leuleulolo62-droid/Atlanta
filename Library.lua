@@ -2034,20 +2034,112 @@
 				end})
 				section:button_holder({})
 				section:button({name = "Rejoin", callback = function()
-					game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
+					local ts = game:GetService("TeleportService")
+					-- TeleportToPlaceInstance to the SAME JobId you're already in is
+					-- often rejected. Alone -> Kick+Teleport (fresh instance); with
+					-- others -> back into the same instance.
+					if #players:GetPlayers() <= 1 then
+						lp:Kick("\nRejoining...")
+						task.wait()
+						ts:Teleport(game.PlaceId, lp)
+					else
+						ts:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
+					end
 				end})
 				section:button_holder({})
 				section:button({name = "Join New Server", callback = function()
-					local apiRequest = game:GetService("HttpService"):JSONDecode(game:HttpGetAsync("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
-					local data = apiRequest.data[random(1, #apiRequest.data)]
-
-					game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, data.id)
+					local ok, res = pcall(function()
+						return game:GetService("HttpService"):JSONDecode(game:HttpGetAsync("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"))
+					end)
+					if not ok or type(res) ~= "table" or not res.data then return end
+					-- Skip the current server + full servers (the old code could pick
+					-- either, so nothing happened).
+					local candidates = {}
+					for _, s in pairs(res.data) do
+						if type(s) == "table" and s.id and s.playing and s.maxPlayers and s.id ~= game.JobId and s.playing < s.maxPlayers then
+							candidates[#candidates + 1] = s.id
+						end
+					end
+					if #candidates > 0 then
+						game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, candidates[random(1, #candidates)], lp)
+					end
 				end})
+
+				-- Custom cursor: toggle lives in the Style panel; the drawn cursor
+				-- (arrow, hand when hovering a button) is coloured by the theme Accent.
+				local cursor_section = column:section({name = "Cursor"})
+				cursor_section:toggle({name = "Custom Cursor", flag = "custom_cursor", callback = function(bool)
+					library.custom_cursor = bool
+					if not bool then pcall(function() game:GetService("UserInputService").MouseIconEnabled = true end) end
+				end})
+				if Drawing and type(Drawing.new) == "function" then
+					local UIS = game:GetService("UserInputService")
+					local RunS = game:GetService("RunService")
+					local BLACK = Color3.new(0, 0, 0)
+					local objs = {}
+					local function mk(t, z) local d = Drawing.new(t) d.Filled = true d.ZIndex = z objs[#objs+1] = d return d end
+					local aOut, aFill = mk("Triangle", 1), mk("Triangle", 2)
+					local handOut, handFill = {}, {}
+					for i = 1, 3 do handOut[i] = mk("Square", 1) handFill[i] = mk("Square", 2) end
+					local function hideAll() for _, d in ipairs(objs) do pcall(function() d.Visible = false end) end end
+					local btnCache, nextScan = {}, 0
+					local function overBtn(mx, my)
+						if os.clock() >= nextScan then
+							nextScan = os.clock() + 0.4
+							btnCache = {}
+							local roots = {}
+							local ok, hui = pcall(function() return gethui() end)
+							if ok and hui then roots[#roots + 1] = hui end
+							roots[#roots + 1] = game:GetService("CoreGui")
+							for _, r in ipairs(roots) do
+								pcall(function() for _, d in ipairs(r:GetDescendants()) do if d:IsA("GuiButton") then btnCache[#btnCache + 1] = d end end end)
+							end
+						end
+						for _, d in ipairs(btnCache) do
+							local hit = false
+							pcall(function()
+								if d.Visible and d.AbsoluteSize.X > 0 then
+									local ap, sz = d.AbsolutePosition, d.AbsoluteSize
+									hit = mx >= ap.X and mx <= ap.X + sz.X and my >= ap.Y and my <= ap.Y + sz.Y
+								end
+							end)
+							if hit then return true end
+						end
+						return false
+					end
+					local hidOS = false
+					RunS:BindToRenderStep("Atlanta_Cursor", Enum.RenderPriority.Last.Value + 4, function()
+						local show = library.custom_cursor and UIS.MouseBehavior ~= Enum.MouseBehavior.LockCenter
+						if not show then
+							if hidOS then pcall(function() UIS.MouseIconEnabled = true end) hidOS = false end
+							hideAll() return
+						end
+						if UIS.MouseIconEnabled then UIS.MouseIconEnabled = false end
+						hidOS = true
+						local col = themes.preset.accent or Color3.fromRGB(96, 120, 190)
+						local m = UIS:GetMouseLocation()
+						local p = Vector2.new(m.X, m.Y)
+						if overBtn(m.X, m.Y) then
+							aOut.Visible = false aFill.Visible = false
+							local parts = { {2, 7, 6, 10}, {2, 0, 3, 9}, {7, 4, 3, 7} }
+							for i, r in ipairs(parts) do
+								local pos = p + Vector2.new(r[1], r[2])
+								handOut[i].Position = pos - Vector2.new(2, 2) handOut[i].Size = Vector2.new(r[3] + 4, r[4] + 4) handOut[i].Color = col handOut[i].Visible = true
+								handFill[i].Position = pos handFill[i].Size = Vector2.new(r[3], r[4]) handFill[i].Color = BLACK handFill[i].Visible = true
+							end
+						else
+							for i = 1, 3 do handOut[i].Visible = false handFill[i].Visible = false end
+							local A, B, C = p, p + Vector2.new(0, 17), p + Vector2.new(12, 12)
+							aOut.PointA = A + Vector2.new(-2, -2) aOut.PointB = B + Vector2.new(-2, 4) aOut.PointC = C + Vector2.new(4, 2) aOut.Color = col aOut.Visible = true
+							aFill.PointA = A aFill.PointB = B aFill.PointC = C aFill.Color = BLACK aFill.Visible = true
+						end
+					end)
+				end
 			--
 
 			-- cfg holder
 				local holder = library:panel({
-					name = "Configurations", 
+					name = "Configurations",
 					size = dim2(0, 324, 0, 410),
 					position = dim2(0, items.main_holder.AbsolutePosition.X + items.main_holder.AbsoluteSize.X + 2, 0, items.main_holder.AbsolutePosition.Y),
 					image = "rbxassetid://105199726008012",
