@@ -2021,6 +2021,16 @@
 					watermark.set_visible(bool)
 				end})
 				section:button_holder({})
+				section:button({name = "Panic", callback = function()
+					-- Disable every cheat toggle (the loader script populates the
+					-- shared getgenv().Toggles) and close the menu.
+					local Toggles = getgenv().Toggles
+					if Toggles then
+						for _, t in pairs(Toggles) do pcall(function() if t.Value then t:SetValue(false) end end) end
+					end
+					pcall(function() window.set_menu_visibility(false) end)
+				end})
+				section:button_holder({})
 				section:button({name = "Copy JobId", callback = function()
 					setclipboard(game.JobId)
 				end})
