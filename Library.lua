@@ -2051,14 +2051,23 @@
 					-- TeleportToPlaceInstance to the SAME JobId you're already in is
 					-- often rejected. Alone -> Kick+Teleport (fresh instance); with
 					-- others -> back into the same instance.
-					local ok = pcall(function()
-						if #players:GetPlayers() > 1 then
-							ts:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
-						else
-							ts:Teleport(game.PlaceId, lp)
+					-- Roblox REJECTS TeleportToPlaceInstance into the JobId you are ALREADY in,
+					-- so the old 2+ players branch silently did nothing. Reliable rejoin is
+					-- queue-then-teleport: queueonteleport survives the disconnect and hops you
+					-- back into the same JobId once you land.
+					local placeId, jobId = game.PlaceId, game.JobId
+					pcall(function()
+						if queueonteleport then
+							queueonteleport(([[
+								task.wait(2)
+								pcall(function()
+									game:GetService("TeleportService"):TeleportToPlaceInstance(%d, "%s", game:GetService("Players").LocalPlayer)
+								end)
+							]]):format(placeId, jobId))
 						end
 					end)
-					if not ok then pcall(function() ts:Teleport(game.PlaceId, lp) end) end
+					local ok = pcall(function() ts:Teleport(placeId, lp) end)
+					if not ok then pcall(function() ts:TeleportToPlaceInstance(placeId, jobId, lp) end) end
 				end})
 				section:button_holder({})
 				section:button({name = "Join New Server", callback = function()
