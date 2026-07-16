@@ -3124,9 +3124,10 @@
 				objects[ "box_filled" ].Parent = fget("Box_Filled", false) and objects[ "holder" ] or library.cache
 				objects[ "box_filled" ].BackgroundColor3 = fcolor("Box_Filled_Color", rgb(255, 0, 0))
 
-				-- Gradient: mirrors the in-world ESP. "Half" finishes the ramp at the midpoint
-				-- (so the bottom half is flat c2), "Full" ramps across the whole box.
-				local grad_on = fget("Gradient", false)
+				-- Gradient: mirrors the in-world ESP, which gates the box gradient on Filled Box
+				-- being on. "Half" finishes the ramp at the midpoint (bottom half flat c2),
+				-- "Full" ramps across the whole box.
+				local grad_on = fget("Gradient", false) and fget("Box_Filled", false)
 				local grad_c1 = fcolor("Gradient_Color1", rgb(119, 120, 255))
 				local grad_c2 = fcolor("Gradient_Color2", rgb(0, 0, 0))
 				local grad_half = fget("Gradient_Mode", "Full") == "Half"
@@ -3143,7 +3144,8 @@
 				objects[ "box_filled_gradient" ].Enabled = grad_on
 				if grad_on then objects[ "box_filled_gradient" ].Color = ramp() end
 
-				local hp_grad_on = grad_on and fget("Healthbar_Gradient", false)
+				-- health bar gradient rides the master Gradient toggle, not Filled Box
+				local hp_grad_on = fget("Gradient", false) and fget("Healthbar_Gradient", false)
 				objects[ "healthbar_gradient" ].Enabled = hp_grad_on
 				if hp_grad_on then objects[ "healthbar_gradient" ].Color = ramp() end
 
