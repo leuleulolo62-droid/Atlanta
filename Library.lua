@@ -2943,7 +2943,12 @@
 						BorderSizePixel = 0;
 						BackgroundColor3 = rgb(255, 255, 255)
 					});
-				-- 
+					objects[ "healthbar_gradient" ] = library:create( "UIGradient" , {
+						Parent = objects[ "healthbar" ];
+						Rotation = 90;
+						Enabled = false;
+					});
+				--
 
 				-- Distance esp
 					objects[ "distance" ] = library:create( "TextLabel" , {
@@ -3029,6 +3034,13 @@
 						ZIndex = 0;
 						BackgroundColor3 = fcolor("Box_Filled_Color", rgb(255, 0, 0))
 					});
+					-- The preview is real GUI, so unlike the in-world Drawing ESP (which fakes a
+					-- gradient with stacked quads) this can use an actual UIGradient.
+					objects[ "box_filled_gradient" ] = library:create( "UIGradient" , {
+						Parent = objects[ "box_filled" ];
+						Rotation = 90;
+						Enabled = false;
+					});
 				--
 			end
 
@@ -3102,8 +3114,38 @@
 					corner.Frame.BackgroundColor3 = fcolor("Box_Color", rgb(255, 0, 0))
 				end
 
+				-- 2-corner = the diagonal pair (top-left + bottom-right), matching the in-world
+				-- ESP. Frames 1/2 are TL, 3/4 TR, 5/6 BL, 7/8 BR -- so drop TR and BL.
+				local four_corners = tostring(fget("Corner_Count", "4")) == "4"
+				for _, i in ipairs({ "3", "4", "5", "6" }) do
+					objects[ i ].Visible = four_corners
+				end
+
 				objects[ "box_filled" ].Parent = fget("Box_Filled", false) and objects[ "holder" ] or library.cache
 				objects[ "box_filled" ].BackgroundColor3 = fcolor("Box_Filled_Color", rgb(255, 0, 0))
+
+				-- Gradient: mirrors the in-world ESP. "Half" finishes the ramp at the midpoint
+				-- (so the bottom half is flat c2), "Full" ramps across the whole box.
+				local grad_on = fget("Gradient", false)
+				local grad_c1 = fcolor("Gradient_Color1", rgb(119, 120, 255))
+				local grad_c2 = fcolor("Gradient_Color2", rgb(0, 0, 0))
+				local grad_half = fget("Gradient_Mode", "Full") == "Half"
+				local function ramp()
+					if grad_half then
+						return ColorSequence.new({
+							ColorSequenceKeypoint.new(0, grad_c1),
+							ColorSequenceKeypoint.new(0.5, grad_c2),
+							ColorSequenceKeypoint.new(1, grad_c2),
+						})
+					end
+					return ColorSequence.new(grad_c1, grad_c2)
+				end
+				objects[ "box_filled_gradient" ].Enabled = grad_on
+				if grad_on then objects[ "box_filled_gradient" ].Color = ramp() end
+
+				local hp_grad_on = grad_on and fget("Healthbar_Gradient", false)
+				objects[ "healthbar_gradient" ].Enabled = hp_grad_on
+				if hp_grad_on then objects[ "healthbar_gradient" ].Color = ramp() end
 
 				objects[ "health_text" ].Parent = fget("Health_Text", false) and objects[ "holder" ] or library.cache
 				objects[ "health_text" ].Text = tostring(math.floor(character.Humanoid.Health))
