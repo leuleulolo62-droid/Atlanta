@@ -2713,7 +2713,39 @@
 					AutomaticSize = Enum.AutomaticSize.Y;
 					TextSize = 12;
 				});
-				
+
+				-- Staff rank tag: sits above the name, same as the in-world ESP. The name label
+				-- is AnchorPoint(0,1) at y=-5 and ~14px tall, so -21 clears it.
+				objects[ "staff_tag" ] = library:create( "TextLabel" , {
+					FontFace = library.font;
+					Parent = library.cache;
+					TextColor3 = rgb(255, 0, 0);
+					BorderColor3 = rgb(0, 0, 0);
+					Text = "[STAFF] Moderator";
+					Name = "\0";
+					TextStrokeTransparency = 0;
+					AnchorPoint = vec2(0, 1);
+					Size = dim2(1, 0, 0, 0);
+					BackgroundTransparency = 1;
+					Position = dim2(0, 0, 0, -21);
+					BorderSizePixel = 0;
+					AutomaticSize = Enum.AutomaticSize.Y;
+					TextSize = 12;
+				});
+
+				-- Tracer: in-world it runs from the bottom of the screen to the target, so in the
+				-- preview it runs from the bottom of the VIEWPORT to the box. Length/x-offset are
+				-- recomputed per frame in change_health (the box moves as the clone animates).
+				objects[ "tracer" ] = library:create( "Frame" , {
+					Parent = library.cache;
+					Name = "\0";
+					AnchorPoint = vec2(0.5, 1);
+					Position = dim2(0.5, 0, 1, 0);
+					Size = dim2(0, 1, 0, 0);
+					BorderSizePixel = 0;
+					BackgroundColor3 = rgb(255, 255, 255);
+				});
+
 				objects[ "box_handler" ] = library:create( "Frame" , {
 					Parent = library.cache;
 					Name = "\0";
@@ -3045,6 +3077,18 @@
 			end
 
 			cfg.change_health = function()
+				-- Tracer geometry is per-frame (the box moves as the clone animates), so it runs
+				-- here rather than in refresh_elements, which only fires on a flag change.
+				if objects[ "tracer" ].Parent ~= library.cache then
+					local vp, holder = items.viewportframe, objects[ "holder" ]
+					local vpBottom = vp.AbsolutePosition.Y + vp.AbsoluteSize.Y
+					local boxBottom = holder.AbsolutePosition.Y + holder.AbsoluteSize.Y
+					local boxCenterX = holder.AbsolutePosition.X + holder.AbsoluteSize.X / 2
+					local vpCenterX = vp.AbsolutePosition.X + vp.AbsoluteSize.X / 2
+					objects[ "tracer" ].Size = dim2(0, 1, 0, math.max(0, vpBottom - boxBottom))
+					objects[ "tracer" ].Position = dim2(0.5, boxCenterX - vpCenterX, 1, 0)
+				end
+
 				if objects[ "healthbar_holder" ].Parent ~= objects[ "holder" ] then
 					return
 				end
@@ -3052,7 +3096,10 @@
 				local humanoid = character.Humanoid
 
 				local multiplier = humanoid.MaxHealth * math.abs(math.sin(tick() * 2)) / humanoid.MaxHealth
-				local color = fcolor("Health_Low", rgb(255, 0, 0)):Lerp(fcolor("Health_High", rgb(0, 255, 0)), multiplier)
+				-- The in-world ESP paints the bar ONE flat colour (ESPHealthColor), so honour that
+				-- when the caller pushes it; fall back to the Low->High lerp for standalone use.
+				local flat = cfg.overrides and cfg.overrides["Healthbar_Color"]
+				local color = flat or fcolor("Health_Low", rgb(255, 0, 0)):Lerp(fcolor("Health_High", rgb(0, 255, 0)), multiplier)
 
 				objects[ "healthbar" ].Size = UDim2.new(1, -2, multiplier, -2)
 				objects[ "healthbar" ].Position = UDim2.new(0, 1, 1 - multiplier, 1)
@@ -3073,6 +3120,8 @@
 					["Weapon_Color"] = {objects[ "weapon" ]};
 					["Team_Name"] = objects[ "team_name" ];
 					["Team_Name_Color"] = {objects[ "team_name" ]};
+					["Health_Text_Color"] = {objects[ "health_text" ]};
+					["Staff_Color"] = {objects[ "staff_tag" ]};
 				}
 
 				local color_defaults = {
@@ -3080,6 +3129,8 @@
 					["Distance_Color"] = rgb(200, 200, 200);
 					["Weapon_Color"] = rgb(200, 200, 200);
 					["Team_Name_Color"] = rgb(200, 200, 200);
+					["Health_Text_Color"] = rgb(255, 255, 255);
+					["Staff_Color"] = rgb(255, 0, 0);
 				}
 
 				for flag,object in temp do
@@ -3124,6 +3175,15 @@
 				objects[ "box_filled" ].Parent = fget("Box_Filled", false) and objects[ "holder" ] or library.cache
 				objects[ "box_filled" ].BackgroundColor3 = fcolor("Box_Filled_Color", rgb(255, 0, 0))
 
+				-- These two are handled outside the temp loop above: that loop defaults every flag
+				-- to TRUE and parents to the box holder, but the staff tag must default OFF and the
+				-- tracer belongs to the viewport (it runs from the screen bottom, not the box).
+				objects[ "staff_tag" ].Parent = fget("Staff", false) and objects[ "holder" ] or library.cache
+				objects[ "staff_tag" ].Text = tostring(fget("Staff_Text", "[STAFF] Moderator"))
+
+				objects[ "tracer" ].Parent = fget("Tracer", false) and items.viewportframe or library.cache
+				objects[ "tracer" ].BackgroundColor3 = fcolor("Tracer_Color", rgb(255, 255, 255))
+
 				-- Gradient: mirrors the in-world ESP, which gates the box gradient on Filled Box
 				-- being on. "Half" finishes the ramp at the midpoint (bottom half flat c2),
 				-- "Full" ramps across the whole box.
@@ -3154,8 +3214,22 @@
 
 				local chams_on = fget("Chams", false)
 				local chams_color = fcolor("Chams_Color", rgb(138, 43, 226))
+				-- Approximate the in-world Chams styles. A Highlight has one flat FillColor and no
+				-- gradient, so Gradient shows its top colour and Thermal its hot end -- enough to
+				-- tell the styles apart in a 133x188 preview without rebuilding the slab rig here.
+				local style = tostring(fget("Chams_Type", "Flat"))
+				local fill_t, outline_t = 0, 1
+				if style == "Modulated" then fill_t = 0.45
+				elseif style == "Bloom" then fill_t = 0.6; outline_t = 0
+				elseif style == "Black Mat" then chams_color = rgb(0, 0, 0)
+				elseif style == "Thermal" then chams_color = rgb(255, 40, 0); fill_t = 0.15
+				elseif style == "Gradient" then chams_color = fcolor("Chams_Grad_Color1", chams_color)
+				end
 				chams_highlight.Enabled = chams_on
 				chams_highlight.FillColor = chams_color
+				chams_highlight.FillTransparency = fill_t
+				chams_highlight.OutlineTransparency = outline_t
+				chams_highlight.OutlineColor = chams_color
 				apply_chams_tint(chams_on, chams_color)
 
 				update_china_hat(fget("ChinaHat", false), fcolor("ChinaHat_Color", rgb(255, 0, 0)))
