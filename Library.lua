@@ -3351,9 +3351,13 @@
 				BackgroundColor3 = themes.preset.accent
 			}) library:apply_theme(progress_fill, "accent", "BackgroundColor3")
 
+			-- progress bar: update every frame. TimeLength is 0 until the sound loads,
+			-- so the bar stays empty until then. Once loaded it fills with playback.
 			library:connection(run.Heartbeat, function()
 				if cfg.sound.TimeLength > 0 then
 					progress_fill.Size = dim2(cfg.sound.TimePosition / cfg.sound.TimeLength, 0, 1, 0)
+				else
+					progress_fill.Size = dim2(0, 0, 1, 0)
 				end
 			end)
 
@@ -3384,9 +3388,25 @@
 				art.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
 
 				task.spawn(function()
-					local ok, details = pcall(function()
-						return http_service:JSONDecode(game:HttpGetAsync("https://economy.roblox.com/v2/assets/" .. id .. "/details"))
-					end)
+					-- fetch track details: try executor request first (more reliable), fall back to HttpGet
+					local function http_get(url)
+						local env = getgenv and getgenv() or {}
+						local fn = (typeof(env.request) == "function" and env.request)
+							or (typeof(env.http_request) == "function" and env.http_request)
+							or (env.syn and env.syn.request)
+						if fn then
+							local ok, res = pcall(fn, {Url = url, Method = "GET"})
+							if ok and res and res.Body then return res.Body end
+						end
+						local ok, body = pcall(game.HttpGetAsync, game, url)
+						if ok and body then return body end
+						ok, body = pcall(game.HttpGet, game, url)
+						if ok and body then return body end
+						return nil
+					end
+
+					local details_body = http_get("https://economy.roblox.com/v2/assets/" .. id .. "/details")
+					local ok, details = pcall(function() return details_body and http_service:JSONDecode(details_body) end)
 
 					if ok and details and details.Name then
 						title.Text = details.Name
@@ -3396,9 +3416,9 @@
 						library:notification({text = "Couldn't load track info", time = 3})
 					end
 
-					local thumb_ok, thumb = pcall(function()
-						return http_service:JSONDecode(game:HttpGetAsync("https://thumbnails.roblox.com/v1/assets?assetIds=" .. id .. "&size=150x150&format=Png"))
-					end)
+					-- fetch thumbnail: use the executor request for the thumbnails API (HttpGet can fail on it)
+					local thumb_body = http_get("https://thumbnails.roblox.com/v1/assets?assetIds=" .. id .. "&size=150x150&format=Png")
+					local thumb_ok, thumb = pcall(function() return thumb_body and http_service:JSONDecode(thumb_body) end)
 
 					if thumb_ok and thumb and thumb.data and thumb.data[1] and thumb.data[1].imageUrl then
 						art.Image = thumb.data[1].imageUrl
