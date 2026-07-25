@@ -2112,60 +2112,55 @@
 				overlay_frame.Position = UDim2.new(0, 20, 1, -100)
 				overlay_frame.Parent = overlay_gui
 
-				local overlay_art = library:create("ImageLabel", {
-					Parent = overlay_frame,
-					Name = "",
-					Image = "rbxasset://textures/ui/GuiImagePlaceholder.png",
-					BackgroundTransparency = 1,
-					Size = dim2(0, 56, 0, 56),
-					Position = dim2(0, 0, 0, 12),
-				})
+				local overlay_art = Instance.new("ImageLabel")
+				overlay_art.Name = ""
+				overlay_art.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+				overlay_art.BackgroundTransparency = 1
+				overlay_art.Size = UDim2.new(0, 56, 0, 56)
+				overlay_art.Position = UDim2.new(0, 0, 0, 12)
+				overlay_art.Parent = overlay_frame
 
-				local overlay_title = library:create("TextLabel", {
-					Parent = overlay_frame,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = rgb(255, 255, 255),
-					Text = "No track",
-					BackgroundTransparency = 1,
-					TextStrokeTransparency = 0.4,
-					Position = dim2(0, 64, 0, 8),
-					Size = dim2(1, -64, 0, 16),
-					TextXAlignment = Enum.TextXAlignment.Left,
-					TextSize = 14,
-				})
+				local overlay_title = Instance.new("TextLabel")
+				overlay_title.Name = ""
+				overlay_title.Font = Enum.Font.Gotham
+				overlay_title.TextColor3 = Color3.fromRGB(255, 255, 255)
+				overlay_title.Text = "No track"
+				overlay_title.BackgroundTransparency = 1
+				overlay_title.TextStrokeTransparency = 0.4
+				overlay_title.Position = UDim2.new(0, 64, 0, 8)
+				overlay_title.Size = UDim2.new(1, -64, 0, 16)
+				overlay_title.TextXAlignment = Enum.TextXAlignment.Left
+				overlay_title.TextSize = 14
+				overlay_title.Parent = overlay_frame
 
-				local overlay_time = library:create("TextLabel", {
-					Parent = overlay_frame,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = rgb(180, 180, 200),
-					Text = "0:00 / 0:00",
-					BackgroundTransparency = 1,
-					TextStrokeTransparency = 0.4,
-					Position = dim2(0, 64, 0, 28),
-					Size = dim2(1, -64, 0, 14),
-					TextXAlignment = Enum.TextXAlignment.Left,
-					TextSize = 11,
-				})
+				local overlay_time = Instance.new("TextLabel")
+				overlay_time.Name = ""
+				overlay_time.Font = Enum.Font.Gotham
+				overlay_time.TextColor3 = Color3.fromRGB(180, 180, 200)
+				overlay_time.Text = "0:00 / 0:00"
+				overlay_time.BackgroundTransparency = 1
+				overlay_time.TextStrokeTransparency = 0.4
+				overlay_time.Position = UDim2.new(0, 64, 0, 28)
+				overlay_time.Size = UDim2.new(1, -64, 0, 14)
+				overlay_time.TextXAlignment = Enum.TextXAlignment.Left
+				overlay_time.TextSize = 11
+				overlay_time.Parent = overlay_frame
 
-				local overlay_bar_bg = library:create("Frame", {
-					Parent = overlay_frame,
-					Name = "",
-					Position = dim2(0, 64, 0, 48),
-					Size = dim2(1, -64, 0, 4),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(40, 40, 50),
-					BackgroundTransparency = 0.2,
-				})
+				local overlay_bar_bg = Instance.new("Frame")
+				overlay_bar_bg.Name = ""
+				overlay_bar_bg.Position = UDim2.new(0, 64, 0, 48)
+				overlay_bar_bg.Size = UDim2.new(1, -64, 0, 4)
+				overlay_bar_bg.BorderSizePixel = 0
+				overlay_bar_bg.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+				overlay_bar_bg.BackgroundTransparency = 0.2
+				overlay_bar_bg.Parent = overlay_frame
 
-				local overlay_bar_fill = library:create("Frame", {
-					Parent = overlay_bar_bg,
-					Name = "",
-					Size = dim2(0, 0, 1, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent,
-				})
+				local overlay_bar_fill = Instance.new("Frame")
+				overlay_bar_fill.Name = ""
+				overlay_bar_fill.Size = UDim2.new(0, 0, 1, 0)
+				overlay_bar_fill.BorderSizePixel = 0
+				overlay_bar_fill.BackgroundColor3 = Color3.fromRGB(120, 120, 220)
+				overlay_bar_fill.Parent = overlay_bar_bg
 
 				local function fmt_time(t)
 					if not t or t <= 0 then return "0:00" end
