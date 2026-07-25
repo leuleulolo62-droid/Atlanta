@@ -2089,6 +2089,117 @@
 						pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, candidates[random(1, #candidates)], lp) end)
 					end
 				end})
+
+				-- ===================== MUSIC OVERLAY =====================
+				-- A transparent floating GUI (no background, just text + album art) that
+				-- mirrors the music player: shows the current track image, name, and a
+				-- live playtime bar. Toggle it on/off from the Style panel.
+				local overlay_gui = library:create("ScreenGui", {
+					Parent = (gethui and gethui()) or game:GetService("CoreGui"),
+					Name = "S43MusicOverlay",
+					ResetOnSpawn = false,
+					DisplayOrder = 999997,
+					IgnoreGuiInset = true,
+				})
+				overlay_gui.Enabled = false
+
+				local overlay_frame = library:create("Frame", {
+					Parent = overlay_gui,
+					Name = "",
+					BackgroundTransparency = 1,
+					Size = dim2(0, 280, 0, 80),
+					Position = dim2(0, 20, 1, -100),
+				})
+
+				local overlay_art = library:create("ImageLabel", {
+					Parent = overlay_frame,
+					Name = "",
+					Image = "rbxasset://textures/ui/GuiImagePlaceholder.png",
+					BackgroundTransparency = 1,
+					Size = dim2(0, 56, 0, 56),
+					Position = dim2(0, 0, 0, 12),
+				})
+
+				local overlay_title = library:create("TextLabel", {
+					Parent = overlay_frame,
+					Name = "",
+					FontFace = library.font,
+					TextColor3 = rgb(255, 255, 255),
+					Text = "No track",
+					BackgroundTransparency = 1,
+					TextStrokeTransparency = 0.4,
+					Position = dim2(0, 64, 0, 8),
+					Size = dim2(1, -64, 0, 16),
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextSize = 14,
+				})
+
+				local overlay_time = library:create("TextLabel", {
+					Parent = overlay_frame,
+					Name = "",
+					FontFace = library.font,
+					TextColor3 = rgb(180, 180, 200),
+					Text = "0:00 / 0:00",
+					BackgroundTransparency = 1,
+					TextStrokeTransparency = 0.4,
+					Position = dim2(0, 64, 0, 28),
+					Size = dim2(1, -64, 0, 14),
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextSize = 11,
+				})
+
+				local overlay_bar_bg = library:create("Frame", {
+					Parent = overlay_frame,
+					Name = "",
+					Position = dim2(0, 64, 0, 48),
+					Size = dim2(1, -64, 0, 4),
+					BorderSizePixel = 0,
+					BackgroundColor3 = rgb(40, 40, 50),
+					BackgroundTransparency = 0.2,
+				})
+
+				local overlay_bar_fill = library:create("Frame", {
+					Parent = overlay_bar_bg,
+					Name = "",
+					Size = dim2(0, 0, 1, 0),
+					BorderSizePixel = 0,
+					BackgroundColor3 = themes.preset.accent,
+				})
+
+				local function fmt_time(t)
+					if not t or t <= 0 then return "0:00" end
+					local m = math.floor(t / 60)
+					local s = math.floor(t % 60)
+					return m .. ":" .. (s < 10 and "0" or "") .. s
+				end
+
+				-- poll the music player's sound object to keep the overlay in sync
+				local overlay_conn
+				section:toggle({name = "Music Overlay", flag = "music_overlay", callback = function(bool)
+					overlay_gui.Enabled = bool
+					if bool then
+						overlay_conn = run.Heartbeat:Connect(function()
+							-- find the music sound (created by music_player)
+							local snd = sound_service:FindFirstChildOfClass("Sound")
+							if snd and snd.SoundId ~= "" then
+								overlay_title.Text = snd.Name ~= "" and snd.Name or "Playing"
+								local pos, len = snd.TimePosition, snd.TimeLength
+								overlay_time.Text = fmt_time(pos) .. " / " .. fmt_time(len)
+								if len > 0 then
+									overlay_bar_fill.Size = dim2(pos / len, 0, 1, 0)
+								else
+									overlay_bar_fill.Size = dim2(0, 0, 1, 0)
+								end
+							else
+								overlay_title.Text = "No track loaded"
+								overlay_time.Text = "0:00 / 0:00"
+								overlay_bar_fill.Size = dim2(0, 0, 1, 0)
+							end
+						end)
+					else
+						if overlay_conn then overlay_conn:Disconnect() overlay_conn = nil end
+					end
+				end})
 			--
 
 			-- cfg holder
