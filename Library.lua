@@ -2092,11 +2092,8 @@
 
 				-- ===================== MUSIC OVERLAY =====================
 				-- A transparent floating GUI (no background, just text + album art) that
-				-- mirrors the music player: shows the current track image, name, and a
-				-- live playtime bar. Toggle it on/off from the Style panel.
-				-- IMPORTANT: created as a STANDALONE ScreenGui (not via library:create) so it
-				-- stays visible even when the menu is closed. library:create parents things
-				-- inside the library's GUI tree, which gets hidden when the menu closes.
+				-- mirrors the music player + Spotify sync. Draggable, position saved,
+				-- toggle saved to config. Stays visible when menu is closed.
 				local overlay_gui = Instance.new("ScreenGui")
 				overlay_gui.Name = "S43MusicOverlay"
 				overlay_gui.ResetOnSpawn = false
@@ -2109,7 +2106,19 @@
 				overlay_frame.Name = ""
 				overlay_frame.BackgroundTransparency = 1
 				overlay_frame.Size = UDim2.new(0, 280, 0, 80)
-				overlay_frame.Position = UDim2.new(0, 20, 1, -100)
+				-- load saved position
+				local ov_saved_pos = nil
+				pcall(function()
+					if readfile then
+						local f = readfile("S43_music_overlay_pos.txt")
+						if f and f ~= "" then
+							local xs, ys = f:match("([^|]+)|([^|]+)")
+							if xs and ys then ov_saved_pos = UDim2.new(0, tonumber(xs) or 20, 0, tonumber(ys) or -100) end
+						end
+					end
+				end)
+				overlay_frame.Position = ov_saved_pos or UDim2.new(0, 20, 1, -100)
+				overlay_frame.Active = true
 				overlay_frame.Parent = overlay_gui
 
 				local overlay_art = Instance.new("ImageLabel")
@@ -2169,16 +2178,75 @@
 					return m .. ":" .. (s < 10 and "0" or "") .. s
 				end
 
+				-- DRAG: make the overlay movable, save position on release
+				local ov_dragging = false
+				local ov_drag_start = nil
+				local ov_frame_start = nil
+				overlay_frame.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						ov_dragging = true
+						ov_drag_start = input.Position
+						ov_frame_start = overlay_frame.Position
+					end
+				end)
+				overlay_frame.InputChanged:Connect(function(input)
+					if ov_dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+						local delta = input.Position - ov_drag_start
+						overlay_frame.Position = UDim2.new(ov_frame_start.X.Scale, ov_frame_start.X.Offset + delta.X, ov_frame_start.Y.Scale, ov_frame_start.Y.Offset + delta.Y)
+					end
+				end)
+				overlay_frame.InputEnded:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						ov_dragging = false
+						-- save position to file
+						pcall(function()
+							if writefile then
+								local p = overlay_frame.Position
+								writefile("S43_music_overlay_pos.txt", tostring(p.X.Offset) .. "|" .. tostring(p.Y.Offset))
+							end
+						end)
+					end
+				end)
+
+				-- store ref so music_player can push album art to the overlay
+				library._music_overlay = {
+					art = overlay_art,
+					title = overlay_title,
+					time = overlay_time,
+					bar_fill = overlay_bar_fill,
+					gui = overlay_gui,
+				}
+
 				-- poll the music player's sound object to keep the overlay in sync
 				local overlay_conn
-				section:toggle({name = "Music Overlay", flag = "music_overlay", callback = function(bool)
+				section:toggle({name = "Music Overlay", flag = "music_overlay", default = false, callback = function(bool)
 					overlay_gui.Enabled = bool
+					-- save toggle state to config
+					pcall(function()
+						if writefile then writefile("S43_music_overlay_on.txt", bool and "1" or "0") end
+					end)
 					if bool then
 						overlay_conn = run.Heartbeat:Connect(function()
-							-- find the music sound (created by music_player)
-							local snd = sound_service:FindFirstChildOfClass("Sound")
+							-- find the music sound (created by music_player) — search SoundService
+							-- AND the music player's cfg.sound reference
+							local snd = nil
+							-- try the music player's stored sound first
+							if library._music_sound and library._music_sound.SoundId ~= "" then
+								snd = library._music_sound
+							else
+								snd = sound_service:FindFirstChildOfClass("Sound")
+							end
 							if snd and snd.SoundId ~= "" then
-								overlay_title.Text = snd.Name ~= "" and snd.Name or "Playing"
+								-- sync title from the music player's title label if available
+								if library._music_title_label then
+									overlay_title.Text = library._music_title_label.Text or "Playing"
+								else
+									overlay_title.Text = snd.Name ~= "" and snd.Name or "Playing"
+								end
+								-- sync album art from the music player's art label if available
+								if library._music_art_label and library._music_art_label.Image ~= "rbxasset://textures/ui/GuiImagePlaceholder.png" then
+									overlay_art.Image = library._music_art_label.Image
+								end
 								local pos, len = snd.TimePosition, snd.TimeLength
 								overlay_time.Text = fmt_time(pos) .. " / " .. fmt_time(len)
 								if len > 0 then
@@ -2187,15 +2255,53 @@
 									overlay_bar_fill.Size = dim2(0, 0, 1, 0)
 								end
 							else
-								overlay_title.Text = "No track loaded"
-								overlay_time.Text = "0:00 / 0:00"
-								overlay_bar_fill.Size = dim2(0, 0, 1, 0)
+								-- try Spotify data if no in-game sound
+								if library._spotify_title and library._spotify_title ~= "" then
+									overlay_title.Text = library._spotify_title
+									overlay_time.Text = library._spotify_subtitle or ""
+									if library._spotify_art and library._spotify_art ~= "" then
+										overlay_art.Image = library._spotify_art
+									end
+								else
+									overlay_title.Text = "No track loaded"
+									overlay_time.Text = "0:00 / 0:00"
+									overlay_bar_fill.Size = dim2(0, 0, 1, 0)
+								end
 							end
 						end)
 					else
 						if overlay_conn then overlay_conn:Disconnect() overlay_conn = nil end
 					end
 				end})
+
+				-- restore saved toggle state on load
+				task.spawn(function()
+					task.wait(1)
+					pcall(function()
+						if readfile then
+							local f = readfile("S43_music_overlay_on.txt")
+							if f == "1" then
+								-- re-enable via the flag
+								if flags["music_overlay"] ~= nil then
+									-- can't programmatically toggle Atlanta's toggle, so just enable the gui
+									overlay_gui.Enabled = true
+									overlay_conn = run.Heartbeat:Connect(function()
+										local snd = library._music_sound or sound_service:FindFirstChildOfClass("Sound")
+										if snd and snd.SoundId ~= "" then
+											if library._music_title_label then overlay_title.Text = library._music_title_label.Text or "Playing" end
+											if library._music_art_label and library._music_art_label.Image ~= "rbxasset://textures/ui/GuiImagePlaceholder.png" then
+												overlay_art.Image = library._music_art_label.Image
+											end
+											local pos, len = snd.TimePosition, snd.TimeLength
+											overlay_time.Text = fmt_time(pos) .. " / " .. fmt_time(len)
+											if len > 0 then overlay_bar_fill.Size = dim2(pos / len, 0, 1, 0) else overlay_bar_fill.Size = dim2(0, 0, 1, 0) end
+										end
+									end)
+								end
+							end
+						end
+					end)
+				end)
 			--
 
 			-- cfg holder
@@ -3391,6 +3497,9 @@
 				Looped = options.loop or false,
 				Volume = options.volume or 0.5
 			})
+
+			-- expose sound to the music overlay so it can sync playtime
+			library._music_sound = cfg.sound
 
 			local holder = library:create("Frame", {
 				Parent = self.holder,
