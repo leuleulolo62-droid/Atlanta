@@ -3408,6 +3408,113 @@
 				cfg.sound:Play()
 			end})
 
+			-- SPOTIFY INTEGRATION: polls local server, fetches album art, falls back to Roblox asset mode
+			cfg.spotify_on = false
+			cfg.spotify_last_song = ""
+
+			local function spotify_http(url)
+				local env = getgenv and getgenv() or {}
+				local fn = (typeof(env.request) == "function" and env.request)
+					or (typeof(env.http_request) == "function" and env.http_request)
+					or (env.syn and env.syn.request)
+				if fn then
+					local ok, res = pcall(fn, {Url = url, Method = "GET"})
+					if ok and res and res.Body then return res.Body end
+				end
+				return nil
+			end
+
+			local function spotify_parse(body)
+				if not body then return nil end
+				local song = body:match('"song":"([^"]*)"') or body:match('"song":%s*"([^"]*)"')
+				local artist = body:match('"artist":"([^"]*)"') or body:match('"artist":%s*"([^"]*)"')
+				local art_url = body:match('"albumArt":"([^"]*)"') or body:match('"albumArt":%s*"([^"]*)"')
+				local is_playing = body:find('"isPlaying":true') ~= nil
+				local has_error = body:find('"error":true') ~= nil
+				if not song then return nil end
+				return {
+					song = song,
+					artist = artist or "",
+					albumArt = art_url or "",
+					isPlaying = is_playing,
+					error = has_error
+				}
+			end
+
+			local function spotify_download_art(url)
+				if not url or url == "" then return nil end
+				if not writefile or not getcustomasset then return nil end
+				local art_path = "S43_spotify_art.jpg"
+				pcall(function()
+					local body = game:HttpGet(url)
+					writefile(art_path, body)
+				end)
+				if isfile and isfile(art_path) then
+					local ok, asset = pcall(getcustomasset, art_path)
+					if ok and asset then return asset end
+				end
+				return nil
+			end
+
+			local function spotify_update_display(track)
+				if track.error then
+					title.Text = "Spotify: Server Offline"
+					subtitle.Text = "Run spotify_server.js"
+					art.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+					return
+				end
+				if track.isPlaying then
+					title.Text = track.song
+					subtitle.Text = "by " .. track.artist
+				else
+					title.Text = "Paused: " .. track.song
+					subtitle.Text = track.artist ~= "" and ("by " .. track.artist) or ""
+				end
+				if track.albumArt and track.albumArt ~= "" then
+					local asset_id = spotify_download_art(track.albumArt)
+					if asset_id then
+						art.Image = asset_id
+					end
+				end
+			end
+
+			local function spotify_poll()
+				while cfg.spotify_on do
+					local body = spotify_http("http://localhost:3000")
+					if body then
+						local track = spotify_parse(body)
+						if track then
+							if track.song ~= cfg.spotify_last_song then
+								cfg.spotify_last_song = track.song
+								spotify_update_display(track)
+							end
+						end
+					else
+						if cfg.spotify_last_song ~= "__offline" then
+							cfg.spotify_last_song = "__offline"
+							title.Text = "Spotify: Server Offline"
+							subtitle.Text = "Run spotify_server.js on your PC"
+							art.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+						end
+					end
+					task.wait(2)
+				end
+			end
+
+			self:button_holder({})
+			self:button({name = "Spotify Sync", callback = function()
+				cfg.spotify_on = not cfg.spotify_on
+				if cfg.spotify_on then
+					cfg.spotify_last_song = ""
+					library:notification({text = "Spotify sync started - polling localhost:3000", time = 3})
+					task.spawn(spotify_poll)
+				else
+					library:notification({text = "Spotify sync stopped", time = 2})
+					title.Text = "Spotify sync stopped"
+					subtitle.Text = ""
+				end
+			end})
+
 			return setmetatable(cfg, library)
 		end
 
