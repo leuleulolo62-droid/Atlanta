@@ -2094,22 +2094,23 @@
 				-- A transparent floating GUI (no background, just text + album art) that
 				-- mirrors the music player: shows the current track image, name, and a
 				-- live playtime bar. Toggle it on/off from the Style panel.
-				local overlay_gui = library:create("ScreenGui", {
-					Parent = (gethui and gethui()) or game:GetService("CoreGui"),
-					Name = "S43MusicOverlay",
-					ResetOnSpawn = false,
-					DisplayOrder = 999997,
-					IgnoreGuiInset = true,
-				})
+				-- IMPORTANT: created as a STANDALONE ScreenGui (not via library:create) so it
+				-- stays visible even when the menu is closed. library:create parents things
+				-- inside the library's GUI tree, which gets hidden when the menu closes.
+				local overlay_gui = Instance.new("ScreenGui")
+				overlay_gui.Name = "S43MusicOverlay"
+				overlay_gui.ResetOnSpawn = false
+				overlay_gui.DisplayOrder = 999997
+				overlay_gui.IgnoreGuiInset = true
 				overlay_gui.Enabled = false
+				pcall(function() overlay_gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
 
-				local overlay_frame = library:create("Frame", {
-					Parent = overlay_gui,
-					Name = "",
-					BackgroundTransparency = 1,
-					Size = dim2(0, 280, 0, 80),
-					Position = dim2(0, 20, 1, -100),
-				})
+				local overlay_frame = Instance.new("Frame")
+				overlay_frame.Name = ""
+				overlay_frame.BackgroundTransparency = 1
+				overlay_frame.Size = UDim2.new(0, 280, 0, 80)
+				overlay_frame.Position = UDim2.new(0, 20, 1, -100)
+				overlay_frame.Parent = overlay_gui
 
 				local overlay_art = library:create("ImageLabel", {
 					Parent = overlay_frame,
