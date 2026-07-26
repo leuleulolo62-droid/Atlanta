@@ -2286,8 +2286,8 @@
 								if flags["music_overlay"] ~= nil then
 									-- can't programmatically toggle Atlanta's toggle, so just enable the gui
 									overlay_gui.Enabled = true
-									overlay_conn = run.Heartbeat:Connect(function()
-										local snd = library._music_sound or sound_service:FindFirstChildOfClass("Sound")
+									overlay_conn = library:connection(run.Heartbeat, function()
+										local snd = library._music_sound
 										if snd and snd.SoundId ~= "" then
 											if library._music_title_label then overlay_title.Text = library._music_title_label.Text or "Playing" end
 											if library._music_art_label and library._music_art_label.Image ~= "rbxasset://textures/ui/GuiImagePlaceholder.png" then
@@ -2296,6 +2296,10 @@
 											local pos, len = snd.TimePosition, snd.TimeLength
 											overlay_time.Text = fmt_time(pos) .. " / " .. fmt_time(len)
 											if len > 0 then overlay_bar_fill.Size = dim2(pos / len, 0, 1, 0) else overlay_bar_fill.Size = dim2(0, 0, 1, 0) end
+										else
+											overlay_title.Text = "No track loaded"
+											overlay_time.Text = "0:00 / 0:00"
+											overlay_bar_fill.Size = dim2(0, 0, 1, 0)
 										end
 									end)
 								end
@@ -2369,12 +2373,21 @@
 					section:button({name = "Unload Menu", callback = function()
 						library:load_config(library.old_config)
 
-						for _, gui in library.guis do 
-							gui:Destroy() 
-						end 
+						for _, gui in library.guis do
+							gui:Destroy()
+						end
 
-						for _, connection in library.connections do 
-							connection:Disconnect() 
+						for _, connection in library.connections do
+							connection:Disconnect()
+						end
+
+						-- stop + destroy the music player's sound so it doesn't keep
+						-- playing after unload (it lives in SoundService, not in
+						-- library.guis, so the gui loop above doesn't reach it).
+						if library._music_sound then
+							pcall(function() library._music_sound:Stop() end)
+							pcall(function() library._music_sound:Destroy() end)
+							library._music_sound = nil
 						end
 
 						blur:Destroy()
