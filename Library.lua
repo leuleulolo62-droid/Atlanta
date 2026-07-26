@@ -3684,7 +3684,23 @@
 					end
 				end)
 
-				cfg.sound:Play()
+				-- Play in a spawn that waits for the sound to LOAD first. Without this,
+				-- :Play() fires on an unloaded sound -> TimeLength stays 0 and TimePosition
+				-- never advances, so the progress bar + time label never move ("tracktime
+				-- doesn't play"). Waiting for Loaded gives the engine time to fetch the
+				-- audio asset and set TimeLength before playback starts.
+				task.spawn(function()
+					if not cfg.sound.IsLoaded then
+						pcall(function()
+							local deadline = os.clock() + 10
+							while not cfg.sound.IsLoaded and os.clock() < deadline do
+								task.wait(0.1)
+							end
+						end)
+					end
+					task.wait(0.1)
+					cfg.sound:Play()
+				end)
 			end})
 
 			-- SPOTIFY INTEGRATION: polls local server, fetches album art, falls back to Roblox asset mode
