@@ -2094,17 +2094,24 @@
 				-- A transparent floating GUI (no background, just text + album art) that
 				-- mirrors the music player + Spotify sync. Draggable, position saved,
 				-- toggle saved to config. Stays visible when menu is closed.
-				-- Built via library:create so it's tracked in library.guis -> it unloads
-				-- on re-exec / Unload Menu (the old raw Instance.new leaked the overlay
-				-- + its album art, which is the "left image doesn't unload" bug).
-				local overlay_gui = library:create("ScreenGui", {
-					Name = "S43MusicOverlay",
-					ResetOnSpawn = false,
-					DisplayOrder = 999997,
-					IgnoreGuiInset = true,
-					Enabled = false,
-					Parent = (gethui and gethui()) or game:GetService("CoreGui"),
-				})
+				-- Raw Instance.new (NOT library:create) so set_menu_visibility
+				-- doesn't add it to the opened/closed toggle set. library:create
+				-- adds ScreenGuis to library.guis, and set_menu_visibility(false)
+				-- disables ALL enabled guis in library.guis — which would hide the
+				-- overlay every time the menu is toggled closed, and NOT re-enable
+				-- it when the menu reopens (it starts Enabled=false so it's never
+				-- in the "opened" restore table). Using a raw Instance.new keeps it
+				-- out of library.guis entirely, so the overlay stays visible
+				-- independently of the menu toggle. Cleanup is handled manually in
+				-- the Unload Menu button + S43 Script_Cleanup (both scan gethui for
+				-- "S43MusicOverlay").
+				local overlay_gui = Instance.new("ScreenGui")
+				overlay_gui.Name = "S43MusicOverlay"
+				overlay_gui.ResetOnSpawn = false
+				overlay_gui.DisplayOrder = 999997
+				overlay_gui.IgnoreGuiInset = true
+				overlay_gui.Enabled = false
+				pcall(function() overlay_gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
 
 				local overlay_frame = Instance.new("Frame")
 				overlay_frame.Name = ""
@@ -2406,6 +2413,22 @@
 								if not parent then return end
 								for _, g in pairs(parent:GetChildren()) do
 									if g.Name == "S43Logo" then g:Destroy() end
+								end
+							end
+							if gethui then scan(gethui()) end
+							scan(game:GetService("CoreGui"))
+							local lp = game:GetService("Players").LocalPlayer
+							local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
+							scan(pg)
+						end)
+
+						-- destroy the music overlay (it's a raw Instance.new, NOT in
+						-- library.guis, so the gui loop above doesn't reach it).
+						pcall(function()
+							local function scan(parent)
+								if not parent then return end
+								for _, g in pairs(parent:GetChildren()) do
+									if g.Name == "S43MusicOverlay" then g:Destroy() end
 								end
 							end
 							if gethui then scan(gethui()) end
