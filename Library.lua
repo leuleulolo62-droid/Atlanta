@@ -2094,13 +2094,17 @@
 				-- A transparent floating GUI (no background, just text + album art) that
 				-- mirrors the music player + Spotify sync. Draggable, position saved,
 				-- toggle saved to config. Stays visible when menu is closed.
-				local overlay_gui = Instance.new("ScreenGui")
-				overlay_gui.Name = "S43MusicOverlay"
-				overlay_gui.ResetOnSpawn = false
-				overlay_gui.DisplayOrder = 999997
-				overlay_gui.IgnoreGuiInset = true
-				overlay_gui.Enabled = false
-				pcall(function() overlay_gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
+				-- Built via library:create so it's tracked in library.guis -> it unloads
+				-- on re-exec / Unload Menu (the old raw Instance.new leaked the overlay
+				-- + its album art, which is the "left image doesn't unload" bug).
+				local overlay_gui = library:create("ScreenGui", {
+					Name = "S43MusicOverlay",
+					ResetOnSpawn = false,
+					DisplayOrder = 999997,
+					IgnoreGuiInset = true,
+					Enabled = false,
+					Parent = (gethui and gethui()) or game:GetService("CoreGui"),
+				})
 
 				local overlay_frame = Instance.new("Frame")
 				overlay_frame.Name = ""
