@@ -2390,6 +2390,31 @@
 							library._music_sound = nil
 						end
 
+						-- destroy the S43 left logo (created by the S43 script, not by
+						-- the library, so library.guis doesn't contain it). Without this
+						-- the logo survives Unload Menu -- the "left image doesn't unload" bug.
+						pcall(function()
+							if getgenv and getgenv().__S43LeftLogo then
+								getgenv().__S43LeftLogo:Destroy()
+								getgenv().__S43LeftLogo = nil
+							end
+						end)
+						-- also scan gethui/CoreGui/PlayerGui for any S43Logo that cloneref
+						-- might have split from the stored reference
+						pcall(function()
+							local function scan(parent)
+								if not parent then return end
+								for _, g in pairs(parent:GetChildren()) do
+									if g.Name == "S43Logo" then g:Destroy() end
+								end
+							end
+							if gethui then scan(gethui()) end
+							scan(game:GetService("CoreGui"))
+							local lp = game:GetService("Players").LocalPlayer
+							local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
+							scan(pg)
+						end)
+
 						blur:Destroy()
 					end})
 			--
