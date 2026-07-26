@@ -3585,11 +3585,36 @@
 				BackgroundColor3 = themes.preset.accent
 			}) library:apply_theme(progress_fill, "accent", "BackgroundColor3")
 
-			-- progress bar: update every frame. TimeLength is 0 until the sound loads,
-			-- so the bar stays empty until then. Once loaded it fills with playback.
+			-- time label showing current pos / total length
+			local time_label = library:create("TextLabel", {
+				Parent = holder,
+				Name = "",
+				FontFace = library.font,
+				TextColor3 = themes.preset.text,
+				BorderColor3 = rgb(0, 0, 0),
+				Text = "0:00 / 0:00",
+				BackgroundTransparency = 1,
+				Position = dim2(0, 72, 0, 46),
+				Size = dim2(1, -72, 0, 14),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextSize = 11
+			}) library:apply_theme(time_label, "text", "TextColor3")
+
+			local function fmt_time(t)
+				if not t or t <= 0 then return "0:00" end
+				local m = math.floor(t / 60)
+				local s = math.floor(t % 60)
+				return m .. ":" .. (s < 10 and "0" or "") .. s
+			end
+
+			-- progress bar + time label: update every frame. TimeLength is 0 until the
+			-- sound loads, so the bar stays empty until then. Once loaded it fills with
+			-- playback and the time label shows pos / total.
 			library:connection(run.Heartbeat, function()
-				if cfg.sound.TimeLength > 0 then
-					progress_fill.Size = dim2(cfg.sound.TimePosition / cfg.sound.TimeLength, 0, 1, 0)
+				local pos, len = cfg.sound.TimePosition, cfg.sound.TimeLength
+				time_label.Text = fmt_time(pos) .. " / " .. fmt_time(len)
+				if len > 0 then
+					progress_fill.Size = dim2(pos / len, 0, 1, 0)
 				else
 					progress_fill.Size = dim2(0, 0, 1, 0)
 				end
