@@ -2230,16 +2230,13 @@
 						if writefile then writefile("S43_music_overlay_on.txt", bool and "1" or "0") end
 					end)
 					if bool then
-						overlay_conn = run.Heartbeat:Connect(function()
-							-- find the music sound (created by music_player) — search SoundService
-							-- AND the music player's cfg.sound reference
-							local snd = nil
-							-- try the music player's stored sound first
-							if library._music_sound and library._music_sound.SoundId ~= "" then
-								snd = library._music_sound
-							else
-								snd = sound_service:FindFirstChildOfClass("Sound")
-							end
+						overlay_conn = library:connection(run.Heartbeat, function()
+							-- Prefer the music player's own sound. The old fallback
+							-- (sound_service:FindFirstChildOfClass("Sound")) grabbed ANY
+							-- sound in SoundService -- including the game's own -- so the
+							-- overlay synced to the wrong sound and the bar raced a track
+							-- that was never loaded. Only use _music_sound.
+							local snd = library._music_sound
 							if snd and snd.SoundId ~= "" then
 								-- sync title from the music player's title label if available
 								if library._music_title_label then
