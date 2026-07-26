@@ -3534,6 +3534,10 @@
 				TextSize = 13
 			}) library:apply_theme(title, "text", "TextColor3")
 
+			-- expose the title + art labels so the music overlay can sync them
+			library._music_title_label = title
+			library._music_art_label = art
+
 			local subtitle = library:create("TextLabel", {
 				Parent = holder,
 				Name = "",
