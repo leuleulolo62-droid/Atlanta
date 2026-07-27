@@ -2427,7 +2427,10 @@
 						end)
 
 						-- destroy the music overlay (it's a raw Instance.new, NOT in
-						-- library.guis, so the gui loop above doesn't reach it).
+						-- library.guis, so the gui loop above doesn't reach it). Destroy via
+						-- the stored _G ref first (cloneref-safe), then scan by name.
+						pcall(function() if _G and _G.__S43MusicOverlayGui then _G.__S43MusicOverlayGui:Destroy() end end)
+						if _G then _G.__S43MusicOverlayGui = nil end
 						pcall(function()
 							local function scan(parent)
 								if not parent then return end
