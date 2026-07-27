@@ -2112,6 +2112,10 @@
 				overlay_gui.IgnoreGuiInset = true
 				overlay_gui.Enabled = false
 				pcall(function() overlay_gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
+				-- stash in _G so the S43 Script_Cleanup can Destroy it directly (cloneref-safe:
+				-- the stored ref is the same object regardless of which CoreGui/gethui ref the
+				-- cleanup sees). The library's own Unload Menu also scans by name as a fallback.
+				if _G then _G.__S43MusicOverlayGui = overlay_gui end
 
 				local overlay_frame = Instance.new("Frame")
 				overlay_frame.Name = ""
