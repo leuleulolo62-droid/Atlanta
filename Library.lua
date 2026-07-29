@@ -5771,7 +5771,7 @@
 					BorderColor3 = rgb(0, 0, 0),
 					Text = "[ Toggle ] " .. tostring(options.name) .. " - none",
 					Size = dim2(1, -5, 0, 18),
-					Visible = ((options.list_mode or "always") == "always") and (options.key ~= nil),
+					Visible = ((options.list_mode or "always") == "always") and (options.key ~= nil and options.key ~= "none"),
 					TextTransparency = 0.5,
 					Position = dim2(0, 5, 0, -1),
 					BorderSizePixel = 0,
@@ -6063,7 +6063,7 @@
 					}
 					
 					if cfg.name then
-						KEYBIND_ELEMENT.Visible = ((cfg.list_mode == "always") or cfg.active) and (cfg.key ~= nil)
+						KEYBIND_ELEMENT.Visible = ((cfg.list_mode == "always") or cfg.active) and (cfg.key ~= nil and cfg.key ~= "none")
 
 						library:tween(KEYBIND_ELEMENT, {
 							TextTransparency = cfg.active and 0 or 0.5,
