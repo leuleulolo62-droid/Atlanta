@@ -4701,6 +4701,48 @@
 				end)
 			end
 
+			-- Resizable groupboxes: a UIFlexItem gives each section a share of the column
+			-- height (VerticalFlex=Fill), and a drag handle on the section's bottom edge changes
+			-- its GrowRatio -- drag down to make the groupbox taller, up to shrink it; the other
+			-- groupboxes flex to compensate. Opt-in on the same reorderable columns as reordering.
+			if self.reorderable then
+				local flex = library:create("UIFlexItem", { Parent = section, GrowRatio = 1 })
+				local grip = library:create("TextButton", {
+					Parent = section,
+					Name = "\0",
+					Text = "",
+					AutoButtonColor = false,
+					BackgroundTransparency = 1,
+					ZIndex = 30,
+					Size = dim2(1, -6, 0, 6),
+					Position = dim2(0, 3, 1, -6),
+				})
+				local nub = library:create("Frame", {
+					Parent = grip,
+					Name = "\0",
+					BorderSizePixel = 0,
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Position = dim2(0.5, 0, 0.5, 0),
+					Size = dim2(0, 26, 0, 2),
+					BackgroundTransparency = 0.35,
+					BackgroundColor3 = themes.preset.accent,
+				}) library:apply_theme(nub, "accent", "BackgroundColor3")
+				local resizing, start_y, start_ratio = false, 0, 1
+				grip.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 then
+						resizing = true; start_y = input.Position.Y; start_ratio = flex.GrowRatio; nub.BackgroundTransparency = 0
+					end
+				end)
+				grip.InputEnded:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 then resizing = false; nub.BackgroundTransparency = 0.35 end
+				end)
+				library:connection(uis.InputChanged, function(input)
+					if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+						flex.GrowRatio = math.clamp(start_ratio + (input.Position.Y - start_y) / 55, 0.25, 8)
+					end
+				end)
+			end
+
 			return setmetatable(cfg, library)
 		end
 
