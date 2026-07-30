@@ -623,10 +623,30 @@
 
 		function library:connection(signal, callback)
 			local connection = signal:Connect(callback)
-			
+
 			insert(library.connections, connection)
 
-			return connection 
+			return connection
+		end
+
+		-- Full teardown. on_unload registers a cleanup callback (a consumer can restore hooks,
+		-- unanchor parts, remove Drawings, etc.); unload runs every registered cleanup FIRST
+		-- (so nothing is mid-flight), then disconnects every tracked connection, destroys every
+		-- tracked GUI, and stops the music sound -- leaving no traceable UI/connection behind.
+		library.cleanups = library.cleanups or {}
+		function library:on_unload(callback)
+			insert(self.cleanups, callback)
+			return callback
+		end
+		function library:unload()
+			for _, fn in ipairs(self.cleanups) do pcall(fn) end
+			self.cleanups = {}
+			for _, connection in pairs(self.connections) do pcall(function() connection:Disconnect() end) end
+			self.connections = {}
+			for _, gui in pairs(self.guis) do pcall(function() gui:Destroy() end) end
+			self.guis = {}
+			pcall(function() if self._music_sound then self._music_sound:Stop(); self._music_sound:Destroy() end end)
+			library.unloaded = true
 		end
 
 		function library:apply_stroke(parent) 
