@@ -7657,7 +7657,7 @@
 				})
 			-- 
 
-			local function open_player_actions(player_obj)
+			local function open_player_actions(player_obj, click_position)
 				if library.player_actions_menu then
 					library.player_actions_menu:Destroy()
 					library.player_actions_menu = nil
@@ -7666,7 +7666,7 @@
 				local menu = library:create("Frame", {
 					Parent = sgui,
 					Name = "",
-					Position = dim2(0, mouse.X, 0, mouse.Y),
+					Position = dim2(0, click_position and click_position.X or mouse.X, 0, click_position and click_position.Y or mouse.Y),
 					Size = dim2(0, 140, 0, 0),
 					AutomaticSize = Enum.AutomaticSize.Y,
 					BorderColor3 = rgb(0, 0, 0),
@@ -7778,9 +7778,9 @@
 					Parent = TextButton,
 					Name = "",
 					FontFace = library.font,
-					TextColor3 = tostring(player) ~= lp.Name and team_color or rgb(0, 0, 255),
+					TextColor3 = player_obj ~= lp and team_color or rgb(0, 0, 255),
 					BorderColor3 = rgb(0, 0, 0),
-					Text = tostring(player) ~= lp.Name and team_name or "LocalPlayer",
+					Text = player_obj ~= lp and team_name or "LocalPlayer",
 					BackgroundTransparency = 1,
 					TextXAlignment = Enum.TextXAlignment.Left,
 					BorderSizePixel = 0,
@@ -7827,11 +7827,39 @@
 				path.instance = TextButton
 				path.line = line
 				path.priority = team_name
+				path.team_name = team_name
 				path.priority_text = priority_text
+				path.connections = {}
+				-- Team is a mutable Player property.  The old list captured it once when
+				-- the row was created, so role/team transfers stayed stale forever.
+				local team_color_connection
+				local function refresh_team()
+					if not player_obj or not player_obj.Parent then return end
+					local fresh_name = player_obj.Team and player_obj.Team.Name or "No Team"
+					local fresh_color = (player_obj.Team and player_obj.Team.TeamColor and player_obj.Team.TeamColor.Color) or themes.preset.text
+					if path.priority == path.team_name then
+						path.priority = fresh_name
+						priority_text.Text = player_obj ~= lp and fresh_name or "LocalPlayer"
+						priority_text.TextColor3 = player_obj ~= lp and fresh_color or rgb(0, 0, 255)
+					end
+					path.team_name = fresh_name
+					if team_color_connection then team_color_connection:Disconnect() team_color_connection = nil end
+					if player_obj.Team then
+						team_color_connection = player_obj.Team:GetPropertyChangedSignal("TeamColor"):Connect(refresh_team)
+					end
+					path.team_color_connection = team_color_connection
+				end
+				path.refresh_team = refresh_team
+				if player_obj then
+					table.insert(path.connections, player_obj:GetPropertyChangedSignal("Team"):Connect(refresh_team))
+					table.insert(path.connections, player_obj:GetPropertyChangedSignal("TeamColor"):Connect(refresh_team))
+					table.insert(path.connections, player_obj:GetPropertyChangedSignal("Neutral"):Connect(refresh_team))
+					refresh_team()
+				end
 				-- library.selected_player = players[tostring(player)]
 				
 				TextButton.MouseButton1Click:Connect(function()
-					if player_name == lp.Name then 
+					if player_name.Text == lp.Name then 
 						return 
 					end 
 
@@ -7846,16 +7874,24 @@
 					library.selected_player = player_name.Text
 
 					if cfg.labels.name then
+						local selected = players:FindFirstChild(player_name.Text)
+						if not selected then return end
 						cfg.labels.name.set("User: " .. player_name.Text)
-						cfg.labels.display.set("DisplayName: " .. players[player_name.Text].DisplayName)
-						cfg.labels.uid.set("User Id: " .. players[player_name.Text].UserId)
+						cfg.labels.display.set("DisplayName: " .. selected.DisplayName)
+						cfg.labels.uid.set("User Id: " .. selected.UserId)
+						cfg.labels.account_age.set("Account Age: " .. selected.AccountAge .. " days")
+						-- Roblox exposes AccountAge in whole days, not the exact creation time.
+						-- Label the derived date accordingly instead of implying false precision.
+						cfg.labels.account_created.set("Created (approx.): " .. os.date("!%Y-%m-%d", os.time() - selected.AccountAge * 86400))
 					end
 				end)
 
-				TextButton.MouseButton2Click:Connect(function()
-					if player_obj then
-						open_player_actions(player_obj)
-					end
+				-- InputBegan is deliberately used instead of MouseButton2Click: some executor
+				-- UI layers synthesize the latter after a left-click focus change.  This only
+				-- opens the action menu from an actual right-button input on this row.
+				TextButton.InputBegan:Connect(function(input, game_processed)
+					if game_processed or input.UserInputType ~= Enum.UserInputType.MouseButton2 then return end
+					if player_obj then open_player_actions(player_obj, input.Position) end
 				end)
 
 				return path 
@@ -7876,9 +7912,14 @@
 
 			function cfg.remove_player(player) 
 				local path = library.playerlist_data[tostring(player)]
+				if not path then return end
+				if path.connections then
+					for _, connection in ipairs(path.connections) do pcall(function() connection:Disconnect() end) end
+				end
+				if path.team_color_connection then pcall(function() path.team_color_connection:Disconnect() end) end
 				path.instance:Destroy() 
 				path.line:Destroy() 
-				path = nil 
+				library.playerlist_data[tostring(player)] = nil
 			end 
 
 			function library.prioritize(text) 
@@ -7904,8 +7945,7 @@
 			players.PlayerRemoving:Connect(cfg.remove_player)
 			
 			for _, player in players:GetPlayers() do 
-				local player_object = cfg.create_player(player.Name)
-				insert(library.playerlist_data, player_object)
+				cfg.create_player(player)
 			end 
 
 			self:textbox({name = "Search", callback = function(txt)
@@ -7914,6 +7954,8 @@
 			cfg.labels.name = self:label({name = "Name: ??"})
 			cfg.labels.display = self:label({name = "Display Name: ??"})
 			cfg.labels.uid = self:label({name = "User Id: ??"})
+			cfg.labels.account_age = self:label({name = "Account Age: ??"})
+			cfg.labels.account_created = self:label({name = "Created (approx.): ??"})
 
 			return setmetatable(cfg, library)
 		end 
