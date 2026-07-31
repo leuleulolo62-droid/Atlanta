@@ -2298,7 +2298,8 @@
 					end
 					if source == "spotify" then
 						local track = library._spotify_track or {}
-						overlay_title.Text = (track.isPlaying and track.song) or ("Paused: " .. (track.song or "Spotify"))
+						local trackName = (track.song or "Spotify") .. (track.isAd and " (Ad)" or "")
+						overlay_title.Text = (track.isPlaying and trackName) or ("Paused: " .. trackName)
 						if library._music_art_label and library._music_art_label.Image ~= "rbxasset://textures/ui/GuiImagePlaceholder.png" then
 							overlay_art.Image = library._music_art_label.Image
 						end
@@ -3734,6 +3735,19 @@
 			end})
 			self:slider({name = "Volume", flag = "music_volume", min = 0, max = 100, default = math.floor((options.volume or 0.5) * 100), suffix = "%", callback = function(value)
 				cfg.sound.Volume = value / 100
+				if cfg.spotify_on and cfg.spotify_request then
+					-- Sliders fire continuously while dragged. Send only the final stable
+					-- value so the bridge does not launch a Windows audio-session call for
+					-- every pixel of movement.
+					cfg.spotify_volume_generation = (cfg.spotify_volume_generation or 0) + 1
+					local generation = cfg.spotify_volume_generation
+					task.spawn(function()
+						task.wait(0.2)
+						if cfg.spotify_on and generation == cfg.spotify_volume_generation then
+							cfg.spotify_request("volume?value=" .. tostring(math.floor(value + 0.5)))
+						end
+					end)
+				end
 			end})
 
 			self:textbox({placeholder = "Paste rbxassetid or library link...", flag = input_flag})
@@ -3841,6 +3855,7 @@
 					return {
 						song = tostring(decoded.song or ""), artist = tostring(decoded.artist or ""),
 						albumArt = tostring(decoded.albumArt or ""), isPlaying = decoded.isPlaying == true,
+						isAd = decoded.isAd == true,
 						positionMs = tonumber(decoded.positionMs) or 0, durationMs = tonumber(decoded.durationMs) or 0,
 						sampledAt = tonumber(decoded.sampledAt) or 0,
 						error = decoded.error == true,
@@ -3857,6 +3872,7 @@
 					artist = artist or "",
 					albumArt = art_url or "",
 					isPlaying = is_playing,
+					isAd = body:find('"isAd":true') ~= nil,
 					error = has_error,
 					positionMs = tonumber(body:match('"positionMs":(%d+)')) or 0,
 					durationMs = tonumber(body:match('"durationMs":(%d+)')) or 0,
@@ -3903,11 +3919,12 @@
 					art.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
 					return
 				end
+				local displaySong = track.song .. (track.isAd and " (Ad)" or "")
 				if track.isPlaying then
-					title.Text = track.song
+					title.Text = displaySong
 					subtitle.Text = "by " .. track.artist
 				else
-					title.Text = "Paused: " .. track.song
+					title.Text = "Paused: " .. displaySong
 					subtitle.Text = track.artist ~= "" and ("by " .. track.artist) or ""
 				end
 				if track.albumArt and track.albumArt ~= "" then
@@ -3939,7 +3956,7 @@
 							track.receivedAt = now
 							cfg.spotify_track = track
 							library._spotify_track = track
-							local trackKey = track.song .. "\0" .. track.artist .. "\0" .. tostring(track.isPlaying) .. "\0" .. track.albumArt
+							local trackKey = track.song .. "\0" .. track.artist .. "\0" .. tostring(track.isPlaying) .. "\0" .. tostring(track.isAd) .. "\0" .. track.albumArt
 							if trackKey ~= cfg.spotify_last_song then
 								cfg.spotify_last_song = trackKey
 								spotify_update_display(track)
