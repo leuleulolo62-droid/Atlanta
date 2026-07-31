@@ -6901,20 +6901,16 @@
 				end)
 			end
 
-			local last_dropdown_click = 0
 			dropdown.MouseButton1Click:Connect(function()
-				local now = tick()
-				-- Searchable dropdowns: double-click the closed-field area to focus
-				-- the search box immediately, without having to click its small input.
-				if cfg.searchable and cfg.open and search_box and (now - last_dropdown_click) <= 0.4 then
-					search_box:CaptureFocus()
-					last_dropdown_click = 0
-					return
-				end
-
-				last_dropdown_click = now
 				cfg.open = not cfg.open
 				cfg.set_visible(cfg.open)
+				-- Opening a searchable dropdown immediately accepts typing. This also
+				-- avoids relying on an unreliable double-click timing window.
+				if cfg.searchable and cfg.open and search_box then
+					task.defer(function()
+						if cfg.open then search_box:CaptureFocus() end
+					end)
+				end
 			end)
 
 			cfg:refresh_options(cfg.items) 
