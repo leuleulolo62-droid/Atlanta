@@ -3733,6 +3733,13 @@
 					cfg.sound:Pause()
 				end
 			end})
+			self:button({name = "Next", callback = function()
+				if cfg.spotify_on and cfg.spotify_request then
+					cfg.spotify_request("next")
+				else
+					library:notification({text = "Next is available with Spotify Sync", time = 2})
+				end
+			end})
 			self:slider({name = "Volume", flag = "music_volume", min = 0, max = 100, default = math.floor((options.volume or 0.5) * 100), suffix = "%", callback = function(value)
 				cfg.sound.Volume = value / 100
 				if cfg.spotify_on and cfg.spotify_request then
