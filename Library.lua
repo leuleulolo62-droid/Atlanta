@@ -3948,18 +3948,14 @@
 						if track then
 							local now = os.clock()
 							local incoming = (track.positionMs or 0) / 1000
-							if track.sampledAt > 0 and DateTime and DateTime.now then
-								local bridgeAge = (DateTime.now().UnixTimestampMillis - track.sampledAt) / 1000
-								-- Only trust clocks that agree. A timezone/system-clock mismatch
-								-- must not create a permanent two-second jump every refresh.
-								if bridgeAge >= 0 and bridgeAge <= 1.5 then incoming = incoming + bridgeAge end
-							end
 							local previous = cfg.spotify_track
 							if previous and previous.song == track.song and previous.artist == track.artist and previous.isPlaying and track.isPlaying and previous.receivedAt then
 								local expected = ((previous.positionMs or 0) / 1000) + math.max(0, now - previous.receivedAt)
-								-- Keep ordinary poll jitter from rolling the clock back. A large
-								-- difference is a real seek/track change and is accepted normally.
-								if incoming < expected and expected - incoming < 3 then incoming = expected end
+								-- The local clock is the display clock. Bridge samples arrive on
+								-- uneven boundaries, so applying their tiny drift every second is
+								-- what made the bar stutter or reverse. Only accept a meaningful
+								-- difference as an intentional Spotify seek.
+								if math.abs(incoming - expected) < 3 then incoming = expected end
 							end
 							track.positionMs = math.floor(incoming * 1000 + 0.5)
 							track.receivedAt = now
