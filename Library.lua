@@ -6379,11 +6379,18 @@
 				callback = options.callback or function() end,
 				multi = options.multi or false, 
 				visible = options.visible or true,
+				-- Opt-in searchable dropdown: use searchable = true (or search = true).
+				searchable = options.searchable == true or options.Searchable == true
+					or options.search == true or options.Search == true,
+				search_placeholder = options.search_placeholder or options.SearchPlaceholder
+					or options.placeholder or "Search...",
 
 				open = false, 
 				option_instances = {}, 
 				multi_items = {}, 
-				scrolling = options.scrolling or false, 
+				-- Search results need a bounded viewport rather than an ever-growing popup.
+				scrolling = options.scrolling or options.searchable == true or options.Searchable == true
+					or options.search == true or options.Search == true,
 				ignore = options.ignore or nil,
 			}
 
@@ -6694,6 +6701,41 @@
 					Padding = dim(0, 5),
 					SortOrder = Enum.SortOrder.LayoutOrder
 				}) library:apply_theme(UIGradient, "contrast", "Color") 
+
+				local search_box
+				if cfg.searchable then
+					search_box = library:create("TextBox", {
+						Parent = contrast,
+						Name = "search",
+						LayoutOrder = -1,
+						FontFace = library.font,
+						TextColor3 = themes.preset.text,
+						PlaceholderColor3 = themes.preset.text,
+						PlaceholderText = cfg.search_placeholder,
+						Text = "",
+						ClearTextOnFocus = false,
+						TextSize = 12,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						Size = dim2(1, -4, 0, 18),
+						BorderSizePixel = 0,
+						BackgroundColor3 = themes.preset.inline,
+						ZIndex = 3,
+					})
+					library:apply_theme(search_box, "inline", "BackgroundColor3")
+					library:apply_theme(search_box, "text", "TextColor3")
+					library:apply_theme(search_box, "text", "PlaceholderColor3")
+					library:create("UIPadding", {
+						Parent = search_box,
+						PaddingLeft = dim(0, 5),
+						PaddingRight = dim(0, 5),
+					})
+					local search_stroke = library:create("UIStroke", {
+						Parent = search_box,
+						Color = themes.preset.outline,
+						LineJoinMode = Enum.LineJoinMode.Miter,
+					})
+					library:apply_theme(search_stroke, "outline", "Color")
+				end
 				
 				local UIGradient = library:create("UIGradient", {
 					Parent = background,
@@ -6737,6 +6779,9 @@
 					dropdown_holder.GroupTransparency = 1
 					library:tween(dropdown_holder, {GroupTransparency = 0})
 				else
+					if search_box and search_box.Text ~= "" then
+						search_box.Text = ""
+					end
 					library:tween(dropdown_holder, {GroupTransparency = 1})
 					task.delay(0.22, function()
 						if not cfg.open then dropdown_holder.Visible = false end
@@ -6749,14 +6794,16 @@
 
 				local is_table = type(value) == "table"
 
-				for _,v in next, cfg.option_instances do 
-					if v.Text == value or (is_table and find(value, v.Text)) then 
-						insert(selected, v.Text)
-						cfg.multi_items = selected
-						v.TextColor3 = themes.preset.accent
-					else 
-						v.TextColor3 = themes.preset.text
+				for _, item in next, cfg.items do
+					local item_text = tostring(item)
+					if item_text == value or (is_table and find(value, item_text)) then
+						insert(selected, item_text)
 					end
+				end
+
+				cfg.multi_items = selected
+				for _, option in next, cfg.option_instances do
+					option.TextColor3 = find(selected, option.Text) and themes.preset.accent or themes.preset.text
 				end
 
 				text.Text = is_table and concat(selected, ", ") or selected[1] or "nun"
@@ -6770,8 +6817,39 @@
 				end
 
 				cfg.option_instances = {} 
+				if cfg.empty_instance then
+					cfg.empty_instance:Destroy()
+					cfg.empty_instance = nil
+				end
+				cfg.items = refreshed_list or cfg.items
 
-				for i,v in next, refreshed_list do 
+				local query = search_box and string.lower(search_box.Text) or ""
+				local filtered_items = {}
+				for _, item in ipairs(cfg.items) do
+					local item_text = tostring(item)
+					if query == "" or string.find(string.lower(item_text), query, 1, true) then
+						insert(filtered_items, item_text)
+					end
+				end
+
+				if #filtered_items == 0 and query ~= "" then
+					cfg.empty_instance = library:create("TextLabel", {
+						Parent = contrast,
+						Name = "no_results",
+						FontFace = library.font,
+						TextColor3 = themes.preset.text,
+						Text = "No matches",
+						TextSize = 12,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						Size = dim2(1, 0, 0, 14),
+						BackgroundTransparency = 1,
+						BorderSizePixel = 0,
+						ZIndex = 2,
+					})
+					library:apply_theme(cfg.empty_instance, "text", "TextColor3")
+				end
+
+				for i,v in next, filtered_items do 
 					local TextButton = library:create("TextButton", {
 						Parent = contrast,
 						FontFace = library.font,
@@ -6815,6 +6893,12 @@
 						end
 					end)
 				end
+			end
+
+			if search_box then
+				search_box:GetPropertyChangedSignal("Text"):Connect(function()
+					cfg:refresh_options()
+				end)
 			end
 
 			dropdown.MouseButton1Click:Connect(function()
