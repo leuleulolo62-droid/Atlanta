@@ -6723,6 +6723,8 @@
 					})
 					library:apply_theme(search_box, "inline", "BackgroundColor3")
 					library:apply_theme(search_box, "text", "TextColor3")
+					themes.utility.text.PlaceholderColor3 = themes.utility.text.PlaceholderColor3 or {}
+					library:apply_theme(search_box, "text", "PlaceholderColor3")
 					library:create("UIPadding", {
 						Parent = search_box,
 						PaddingLeft = dim(0, 5),
@@ -6895,8 +6897,13 @@
 			end
 
 			if search_box then
+				local search_generation = 0
 				search_box:GetPropertyChangedSignal("Text"):Connect(function()
-					cfg:refresh_options()
+					search_generation = search_generation + 1
+					local generation = search_generation
+					task.delay(0.08, function()
+						if generation == search_generation then cfg:refresh_options() end
+					end)
 				end)
 			end
 
@@ -7969,9 +7976,6 @@
 						cfg.labels.display.set("DisplayName: " .. selected.DisplayName)
 						cfg.labels.uid.set("User Id: " .. selected.UserId)
 						cfg.labels.account_age.set("Account Age: " .. selected.AccountAge .. " days")
-						-- Roblox exposes AccountAge in whole days, not the exact creation time.
-						-- Label the derived date accordingly instead of implying false precision.
-						cfg.labels.account_created.set("Created (approx.): " .. os.date("!%Y-%m-%d", os.time() - selected.AccountAge * 86400))
 					end
 				end)
 
@@ -8044,7 +8048,6 @@
 			cfg.labels.display = self:label({name = "Display Name: ??"})
 			cfg.labels.uid = self:label({name = "User Id: ??"})
 			cfg.labels.account_age = self:label({name = "Account Age: ??"})
-			cfg.labels.account_created = self:label({name = "Created (approx.): ??"})
 
 			return setmetatable(cfg, library)
 		end 
