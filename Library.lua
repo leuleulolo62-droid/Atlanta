@@ -2059,10 +2059,12 @@
 				end})
 				section:button_holder({})
 				section:button({name = "Copy JobId", callback = function()
+					if getgenv().__S43StreamerMode then return end
 					setclipboard(game.JobId)
 				end})
 				section:button_holder({})
 				section:button({name = "Copy GameID", callback = function()
+					if getgenv().__S43StreamerMode then return end
 					setclipboard(game.GameId)
 				end})
 				section:button_holder({})
@@ -2109,6 +2111,48 @@
 						pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, candidates[random(1, #candidates)], lp) end)
 					end
 				end})
+				-- Server browser: a selectable list is more useful than a blind random hop.
+				-- Roblox's public endpoint does not expose player names, only real occupancy,
+				-- so each entry deliberately shows its player count, ping, and FPS instead.
+				local serverChoices, selectedServer = {}, nil
+				local serverPicker = section:dropdown({name = "Server Browser", items = {"Loading servers..."}, default = "Loading servers...", flag = "server_browser_selected", callback = function(label)
+					selectedServer = serverChoices[label]
+				end})
+				local function refreshServerBrowser()
+					task.spawn(function()
+						local entries, cursor, pages = {}, nil, 0
+						repeat
+							local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+							if cursor then url = url .. "&cursor=" .. game:GetService("HttpService"):UrlEncode(cursor) end
+							local raw
+							pcall(function() raw = game:HttpGet(url) end)
+							if not raw then pcall(function() raw = game:HttpGetAsync(url) end) end
+							local data; pcall(function() data = game:GetService("HttpService"):JSONDecode(raw) end)
+							if type(data) ~= "table" then break end
+							for _, s in ipairs(data.data or {}) do
+								if s.id and s.id ~= game.JobId and s.playing and s.maxPlayers and s.playing < s.maxPlayers then
+									local label = string.format("%d/%d players | %d ms | %d fps", s.playing, s.maxPlayers, math.floor(s.ping or 0), math.floor(s.fps or 0))
+									while serverChoices[label] do label = label .. " " end
+									serverChoices[label] = s
+									entries[#entries + 1] = label
+								end
+							end
+							cursor, pages = data.nextPageCursor, pages + 1
+						until not cursor or pages >= 10 -- avoids freezing the menu in very large games
+						if #entries == 0 then entries[1] = "No joinable servers found" end
+						serverPicker:refresh_options(entries)
+						selectedServer = serverChoices[entries[1]]
+					end)
+				end
+				refreshServerBrowser()
+				section:button_holder({})
+				section:button({name = "Join Selected Server", callback = function()
+					if selectedServer and selectedServer.id then
+						pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, selectedServer.id, lp) end)
+					end
+				end})
+				section:button_holder({})
+				section:button({name = "Refresh Server List", callback = refreshServerBrowser})
 
 				-- ===================== MUSIC OVERLAY =====================
 				-- A transparent floating GUI (no background, just text + album art) that
