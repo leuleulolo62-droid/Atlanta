@@ -2129,9 +2129,18 @@
 				overlay_gui.Name = "S43MusicOverlay"
 				overlay_gui.ResetOnSpawn = false
 				overlay_gui.DisplayOrder = 999997
+				overlay_gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 				overlay_gui.IgnoreGuiInset = true
 				overlay_gui.Enabled = false
-				pcall(function() overlay_gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
+				-- gethui can exist but reject parenting on some executors. Resolve it
+				-- first, then fall back to CoreGui and finally PlayerGui.
+				local overlay_parent
+				pcall(function() if gethui then overlay_parent = gethui() end end)
+				if not overlay_parent then overlay_parent = coregui end
+				local parent_ok = pcall(function() overlay_gui.Parent = overlay_parent end)
+				if not parent_ok or not overlay_gui.Parent then
+					pcall(function() overlay_gui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui") end)
+				end
 				-- stash in _G so the S43 Script_Cleanup can Destroy it directly (cloneref-safe:
 				-- the stored ref is the same object regardless of which CoreGui/gethui ref the
 				-- cleanup sees). The library's own Unload Menu also scans by name as a fallback.
@@ -2154,6 +2163,7 @@
 				end)
 				overlay_frame.Position = ov_saved_pos or UDim2.new(0, 20, 1, -100)
 				overlay_frame.Active = true
+				overlay_frame.Visible = true
 				overlay_frame.Parent = overlay_gui
 
 				local overlay_art = Instance.new("ImageLabel")
@@ -2281,10 +2291,15 @@
 				end
 				library._music_overlay_update = refresh_overlay
 				local function start_overlay_sync()
+					if not overlay_gui.Parent then
+						pcall(function() overlay_gui.Parent = overlay_parent or coregui end)
+					end
+					overlay_gui.Enabled = true
 					if overlay_conn then overlay_conn:Disconnect() end
 					overlay_conn = library:connection(run.Heartbeat, refresh_overlay)
 					refresh_overlay()
 				end
+				library._show_music_overlay = start_overlay_sync
 				section:toggle({name = "Music Overlay", flag = "music_overlay", default = false, callback = function(bool)
 					overlay_gui.Enabled = bool
 					-- save toggle state to config
@@ -3697,10 +3712,22 @@
 
 			self:button_holder({})
 			self:button({name = "Play", callback = function()
-				if cfg.sound.SoundId ~= "" then cfg.sound:Play() end
+				if cfg.spotify_on and cfg.spotify_request then
+					cfg.spotify_request("play")
+				elseif cfg.sound.SoundId ~= "" then
+					cfg.sound:Play()
+				end
 			end})
-			self:button({name = "Pause", callback = function() cfg.sound:Pause() end})
-			self:button({name = "Stop", callback = function() cfg.sound:Stop() end})
+			self:button({name = "Pause", callback = function()
+				if cfg.spotify_on and cfg.spotify_request then
+					cfg.spotify_request("pause")
+				else
+					cfg.sound:Pause()
+				end
+			end})
+			self:slider({name = "Volume", flag = "music_volume", min = 0, max = 100, default = math.floor((options.volume or 0.5) * 100), suffix = "%", callback = function(value)
+				cfg.sound.Volume = value / 100
+			end})
 
 			self:textbox({placeholder = "Paste rbxassetid or library link...", flag = input_flag})
 
@@ -3791,6 +3818,13 @@
 					if ok and res and res.Body then return res.Body end
 				end
 				return nil
+			end
+			cfg.spotify_request = function(action)
+				local body = spotify_http("http://localhost:3000/control/" .. tostring(action))
+				local ok, result = pcall(function() return body and http_service:JSONDecode(body) end)
+				if not (ok and result and result.ok) then
+					library:notification({text = "Spotify " .. tostring(action) .. " failed", time = 2})
+				end
 			end
 
 			local function spotify_parse(body)
@@ -3895,6 +3929,8 @@
 				if cfg.spotify_on then
 					library._spotify_active = true
 					cfg.spotify_last_song = ""
+					-- Do not leave an old Roblox asset playing underneath Spotify.
+					pcall(function() cfg.sound:Pause() end)
 					library:notification({text = "Spotify sync started - polling localhost:3000", time = 3})
 					task.spawn(spotify_poll)
 				else
