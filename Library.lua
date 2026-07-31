@@ -2328,10 +2328,6 @@
 				library._show_music_overlay = start_overlay_sync
 				section:toggle({name = "Music Overlay", flag = "music_overlay", default = false, callback = function(bool)
 					overlay_gui.Enabled = bool
-					-- save toggle state to config
-					pcall(function()
-						if writefile then writefile("S43_music_overlay_on.txt", bool and "1" or "0") end
-					end)
 					if bool then
 						start_overlay_sync()
 					else
@@ -2341,24 +2337,6 @@
 				section:toggle({name = "Overlay Background Invisible", flag = "music_overlay_background_invisible", default = false, callback = function(bool)
 					overlay_frame.BackgroundTransparency = bool and 1 or 0.2
 				end})
-
-				-- restore saved toggle state on load
-				task.spawn(function()
-					task.wait(1)
-					pcall(function()
-						if readfile then
-							local f = readfile("S43_music_overlay_on.txt")
-							if f == "1" then
-								-- re-enable via the flag
-								if flags["music_overlay"] ~= nil then
-									-- can't programmatically toggle Atlanta's toggle, so just enable the gui
-									overlay_gui.Enabled = true
-									start_overlay_sync()
-								end
-							end
-						end
-					end)
-				end)
 			--
 
 			-- cfg holder
