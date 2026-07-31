@@ -2158,7 +2158,7 @@
 				overlay_frame.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
 				overlay_frame.BackgroundTransparency = 0.2
 				overlay_frame.BorderSizePixel = 0
-				overlay_frame.Size = UDim2.new(0, 280, 0, 80)
+				overlay_frame.Size = UDim2.new(0, 300, 0, 88)
 				-- load saved position
 				local ov_saved_pos = nil
 				pcall(function()
@@ -2193,7 +2193,7 @@
 				overlay_art.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
 				overlay_art.BackgroundTransparency = 1
 				overlay_art.Size = UDim2.new(0, 56, 0, 56)
-				overlay_art.Position = UDim2.new(0, 0, 0, 12)
+				overlay_art.Position = UDim2.new(0, 8, 0, 16)
 				overlay_art.Parent = overlay_frame
 
 				local overlay_title = Instance.new("TextLabel")
@@ -2203,8 +2203,8 @@
 				overlay_title.Text = "No track"
 				overlay_title.BackgroundTransparency = 1
 				overlay_title.TextStrokeTransparency = 0.4
-				overlay_title.Position = UDim2.new(0, 64, 0, 8)
-				overlay_title.Size = UDim2.new(1, -64, 0, 16)
+				overlay_title.Position = UDim2.new(0, 72, 0, 13)
+				overlay_title.Size = UDim2.new(1, -80, 0, 16)
 				overlay_title.TextXAlignment = Enum.TextXAlignment.Left
 				overlay_title.TextSize = 14
 				overlay_title.Parent = overlay_frame
@@ -2216,16 +2216,16 @@
 				overlay_time.Text = "0:00 / 0:00"
 				overlay_time.BackgroundTransparency = 1
 				overlay_time.TextStrokeTransparency = 0.4
-				overlay_time.Position = UDim2.new(0, 64, 0, 28)
-				overlay_time.Size = UDim2.new(1, -64, 0, 14)
+				overlay_time.Position = UDim2.new(0, 72, 0, 34)
+				overlay_time.Size = UDim2.new(1, -80, 0, 14)
 				overlay_time.TextXAlignment = Enum.TextXAlignment.Left
 				overlay_time.TextSize = 11
 				overlay_time.Parent = overlay_frame
 
 				local overlay_bar_bg = Instance.new("Frame")
 				overlay_bar_bg.Name = ""
-				overlay_bar_bg.Position = UDim2.new(0, 64, 0, 48)
-				overlay_bar_bg.Size = UDim2.new(1, -64, 0, 4)
+				overlay_bar_bg.Position = UDim2.new(0, 72, 0, 57)
+				overlay_bar_bg.Size = UDim2.new(1, -80, 0, 4)
 				overlay_bar_bg.BorderSizePixel = 0
 				overlay_bar_bg.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 				overlay_bar_bg.BackgroundTransparency = 0.2
@@ -2235,8 +2235,11 @@
 				overlay_bar_fill.Name = ""
 				overlay_bar_fill.Size = UDim2.new(0, 0, 1, 0)
 				overlay_bar_fill.BorderSizePixel = 0
-				overlay_bar_fill.BackgroundColor3 = Color3.fromRGB(120, 120, 220)
+				overlay_bar_fill.BackgroundColor3 = themes.preset.accent
 				overlay_bar_fill.Parent = overlay_bar_bg
+				-- Keep only the elapsed-time fill in sync with the menu accent. The
+				-- overlay panel/background intentionally stays independent of themes.
+				library:apply_theme(overlay_bar_fill, "accent", "BackgroundColor3")
 
 				local function fmt_time(t)
 					if not t or t <= 0 then return "0:00" end
@@ -2334,6 +2337,9 @@
 					else
 						if overlay_conn then overlay_conn:Disconnect() overlay_conn = nil end
 					end
+				end})
+				section:toggle({name = "Overlay Background Invisible", flag = "music_overlay_background_invisible", default = false, callback = function(bool)
+					overlay_frame.BackgroundTransparency = bool and 1 or 0.2
 				end})
 
 				-- restore saved toggle state on load
@@ -3708,9 +3714,6 @@
 					local pos = (tonumber(track.positionMs) or 0) / 1000
 					local len = (tonumber(track.durationMs) or 0) / 1000
 					if track.isPlaying then
-						-- sampledAt is from the local bridge and removes the up-to-one-second
-						-- polling delay. receivedAt keeps the clock advancing between polls.
-						pos = pos + (tonumber(track.sourceAge) or 0)
 						if track.receivedAt then pos = pos + math.max(0, os.clock() - track.receivedAt) end
 					end
 					if len > 0 then pos = math.clamp(pos, 0, len) end
@@ -3943,12 +3946,23 @@
 					if body then
 						local track = spotify_parse(body)
 						if track then
+							local now = os.clock()
+							local incoming = (track.positionMs or 0) / 1000
 							if track.sampledAt > 0 and DateTime and DateTime.now then
-								track.sourceAge = math.clamp((DateTime.now().UnixTimestampMillis - track.sampledAt) / 1000, 0, 2)
-							else
-								track.sourceAge = 0
+								local bridgeAge = (DateTime.now().UnixTimestampMillis - track.sampledAt) / 1000
+								-- Only trust clocks that agree. A timezone/system-clock mismatch
+								-- must not create a permanent two-second jump every refresh.
+								if bridgeAge >= 0 and bridgeAge <= 1.5 then incoming = incoming + bridgeAge end
 							end
-							track.receivedAt = os.clock()
+							local previous = cfg.spotify_track
+							if previous and previous.song == track.song and previous.artist == track.artist and previous.isPlaying and track.isPlaying and previous.receivedAt then
+								local expected = ((previous.positionMs or 0) / 1000) + math.max(0, now - previous.receivedAt)
+								-- Keep ordinary poll jitter from rolling the clock back. A large
+								-- difference is a real seek/track change and is accepted normally.
+								if incoming < expected and expected - incoming < 3 then incoming = expected end
+							end
+							track.positionMs = math.floor(incoming * 1000 + 0.5)
+							track.receivedAt = now
 							cfg.spotify_track = track
 							library._spotify_track = track
 							local trackKey = track.song .. "\0" .. track.artist .. "\0" .. tostring(track.isPlaying) .. "\0" .. track.albumArt
