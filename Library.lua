@@ -3844,7 +3844,8 @@
 				local body = spotify_http("http://localhost:3000/control/" .. tostring(action))
 				local ok, result = pcall(function() return body and http_service:JSONDecode(body) end)
 				if not (ok and result and result.ok) then
-					library:notification({text = "Spotify " .. tostring(action) .. " failed", time = 2})
+					local message = result and result.error or ("Spotify " .. tostring(action) .. " failed")
+					library:notification({text = tostring(message), time = 3})
 				end
 			end
 
