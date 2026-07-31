@@ -2252,8 +2252,39 @@
 					gui = overlay_gui,
 				}
 
-				-- poll the music player's sound object to keep the overlay in sync
+				-- Both the floating overlay and the in-panel player read the same
+				-- timeline function. Spotify is preferred while Spotify Sync is on;
+				-- otherwise the normal Roblox Sound is displayed.
 				local overlay_conn
+				local function refresh_overlay()
+					local pos, len, source = 0, 0, "none"
+					if library._music_get_timeline then
+						pos, len, source = library._music_get_timeline()
+					end
+					if source == "spotify" then
+						local track = library._spotify_track or {}
+						overlay_title.Text = (track.isPlaying and track.song) or ("Paused: " .. (track.song or "Spotify"))
+						if library._music_art_label and library._music_art_label.Image ~= "rbxasset://textures/ui/GuiImagePlaceholder.png" then
+							overlay_art.Image = library._music_art_label.Image
+						end
+					elseif source == "sound" then
+						local snd = library._music_sound
+						overlay_title.Text = (library._music_title_label and library._music_title_label.Text) or (snd and snd.Name) or "Playing"
+						if library._music_art_label and library._music_art_label.Image ~= "rbxasset://textures/ui/GuiImagePlaceholder.png" then
+							overlay_art.Image = library._music_art_label.Image
+						end
+					else
+						overlay_title.Text = "No track loaded"
+					end
+					overlay_time.Text = fmt_time(pos) .. " / " .. fmt_time(len)
+					overlay_bar_fill.Size = dim2((len > 0 and math.clamp(pos / len, 0, 1) or 0), 0, 1, 0)
+				end
+				library._music_overlay_update = refresh_overlay
+				local function start_overlay_sync()
+					if overlay_conn then overlay_conn:Disconnect() end
+					overlay_conn = library:connection(run.Heartbeat, refresh_overlay)
+					refresh_overlay()
+				end
 				section:toggle({name = "Music Overlay", flag = "music_overlay", default = false, callback = function(bool)
 					overlay_gui.Enabled = bool
 					-- save toggle state to config
@@ -2261,46 +2292,7 @@
 						if writefile then writefile("S43_music_overlay_on.txt", bool and "1" or "0") end
 					end)
 					if bool then
-						overlay_conn = library:connection(run.Heartbeat, function()
-							-- Prefer the music player's own sound. The old fallback
-							-- (sound_service:FindFirstChildOfClass("Sound")) grabbed ANY
-							-- sound in SoundService -- including the game's own -- so the
-							-- overlay synced to the wrong sound and the bar raced a track
-							-- that was never loaded. Only use _music_sound.
-							local snd = library._music_sound
-							if snd and snd.SoundId ~= "" then
-								-- sync title from the music player's title label if available
-								if library._music_title_label then
-									overlay_title.Text = library._music_title_label.Text or "Playing"
-								else
-									overlay_title.Text = snd.Name ~= "" and snd.Name or "Playing"
-								end
-								-- sync album art from the music player's art label if available
-								if library._music_art_label and library._music_art_label.Image ~= "rbxasset://textures/ui/GuiImagePlaceholder.png" then
-									overlay_art.Image = library._music_art_label.Image
-								end
-								local pos, len = snd.TimePosition, snd.TimeLength
-								overlay_time.Text = fmt_time(pos) .. " / " .. fmt_time(len)
-								if len > 0 then
-									overlay_bar_fill.Size = dim2(pos / len, 0, 1, 0)
-								else
-									overlay_bar_fill.Size = dim2(0, 0, 1, 0)
-								end
-							else
-								-- try Spotify data if no in-game sound
-								if library._spotify_title and library._spotify_title ~= "" then
-									overlay_title.Text = library._spotify_title
-									overlay_time.Text = library._spotify_subtitle or ""
-									if library._spotify_art and library._spotify_art ~= "" then
-										overlay_art.Image = library._spotify_art
-									end
-								else
-									overlay_title.Text = "No track loaded"
-									overlay_time.Text = "0:00 / 0:00"
-									overlay_bar_fill.Size = dim2(0, 0, 1, 0)
-								end
-							end
-						end)
+						start_overlay_sync()
 					else
 						if overlay_conn then overlay_conn:Disconnect() overlay_conn = nil end
 					end
@@ -2317,22 +2309,7 @@
 								if flags["music_overlay"] ~= nil then
 									-- can't programmatically toggle Atlanta's toggle, so just enable the gui
 									overlay_gui.Enabled = true
-									overlay_conn = library:connection(run.Heartbeat, function()
-										local snd = library._music_sound
-										if snd and snd.SoundId ~= "" then
-											if library._music_title_label then overlay_title.Text = library._music_title_label.Text or "Playing" end
-											if library._music_art_label and library._music_art_label.Image ~= "rbxasset://textures/ui/GuiImagePlaceholder.png" then
-												overlay_art.Image = library._music_art_label.Image
-											end
-											local pos, len = snd.TimePosition, snd.TimeLength
-											overlay_time.Text = fmt_time(pos) .. " / " .. fmt_time(len)
-											if len > 0 then overlay_bar_fill.Size = dim2(pos / len, 0, 1, 0) else overlay_bar_fill.Size = dim2(0, 0, 1, 0) end
-										else
-											overlay_title.Text = "No track loaded"
-											overlay_time.Text = "0:00 / 0:00"
-											overlay_bar_fill.Size = dim2(0, 0, 1, 0)
-										end
-									end)
+									start_overlay_sync()
 								end
 							end
 						end
@@ -3682,14 +3659,35 @@
 				return m .. ":" .. (s < 10 and "0" or "") .. s
 			end
 
-			-- progress bar + time label: update every frame. TimeLength is 0 until the
-			-- sound loads, so the bar stays empty until then. Once loaded it fills with
-			-- playback and the time label shows pos / total.
+			-- One authoritative timeline for both the panel and the floating overlay.
+			-- Spotify sends sampled position/duration once per second; while it is
+			-- playing we advance locally between samples so the clock stays smooth.
+			cfg.spotify_on = false
+			cfg.spotify_track = nil
+			local function current_timeline()
+				local track = cfg.spotify_on and cfg.spotify_track
+				if track then
+					local pos = (tonumber(track.positionMs) or 0) / 1000
+					local len = (tonumber(track.durationMs) or 0) / 1000
+					if track.isPlaying and track.receivedAt then
+						pos = pos + math.max(0, os.clock() - track.receivedAt)
+					end
+					if len > 0 then pos = math.clamp(pos, 0, len) end
+					return pos, len, "spotify"
+				end
+				if cfg.sound and cfg.sound.SoundId ~= "" then
+					return cfg.sound.TimePosition, cfg.sound.TimeLength, "sound"
+				end
+				return 0, 0, "none"
+			end
+			library._music_get_timeline = current_timeline
+
+			-- The normal player and Spotify Sync use the same display values.
 			library:connection(run.Heartbeat, function()
-				local pos, len = cfg.sound.TimePosition, cfg.sound.TimeLength
+				local pos, len = current_timeline()
 				time_label.Text = fmt_time(pos) .. " / " .. fmt_time(len)
 				if len > 0 then
-					progress_fill.Size = dim2(pos / len, 0, 1, 0)
+					progress_fill.Size = dim2(math.clamp(pos / len, 0, 1), 0, 1, 0)
 				else
 					progress_fill.Size = dim2(0, 0, 1, 0)
 				end
@@ -3781,7 +3779,6 @@
 			end})
 
 			-- SPOTIFY INTEGRATION: polls local server, fetches album art, falls back to Roblox asset mode
-			cfg.spotify_on = false
 			cfg.spotify_last_song = ""
 
 			local function spotify_http(url)
@@ -3798,6 +3795,15 @@
 
 			local function spotify_parse(body)
 				if not body then return nil end
+				local ok, decoded = pcall(function() return http_service:JSONDecode(body) end)
+				if ok and type(decoded) == "table" then
+					return {
+						song = tostring(decoded.song or ""), artist = tostring(decoded.artist or ""),
+						albumArt = tostring(decoded.albumArt or ""), isPlaying = decoded.isPlaying == true,
+						positionMs = tonumber(decoded.positionMs) or 0, durationMs = tonumber(decoded.durationMs) or 0,
+						error = decoded.error == true,
+					}
+				end
 				local song = body:match('"song":"([^"]*)"') or body:match('"song":%s*"([^"]*)"')
 				local artist = body:match('"artist":"([^"]*)"') or body:match('"artist":%s*"([^"]*)"')
 				local art_url = body:match('"albumArt":"([^"]*)"') or body:match('"albumArt":%s*"([^"]*)"')
@@ -3809,7 +3815,9 @@
 					artist = artist or "",
 					albumArt = art_url or "",
 					isPlaying = is_playing,
-					error = has_error
+					error = has_error,
+					positionMs = tonumber(body:match('"positionMs":(%d+)')) or 0,
+					durationMs = tonumber(body:match('"durationMs":(%d+)')) or 0,
 				}
 			end
 
@@ -3856,20 +3864,28 @@
 					if body then
 						local track = spotify_parse(body)
 						if track then
-							if track.song ~= cfg.spotify_last_song then
-								cfg.spotify_last_song = track.song
+							track.receivedAt = os.clock()
+							cfg.spotify_track = track
+							library._spotify_track = track
+							local trackKey = track.song .. "\0" .. track.artist .. "\0" .. tostring(track.isPlaying)
+							if trackKey ~= cfg.spotify_last_song then
+								cfg.spotify_last_song = trackKey
 								spotify_update_display(track)
 							end
+							if library._music_overlay_update then library._music_overlay_update() end
 						end
 					else
+						cfg.spotify_track = {song = "Spotify: Server Offline", artist = "", isPlaying = false, positionMs = 0, durationMs = 0}
+						library._spotify_track = cfg.spotify_track
 						if cfg.spotify_last_song ~= "__offline" then
 							cfg.spotify_last_song = "__offline"
 							title.Text = "Spotify: Server Offline"
 							subtitle.Text = "Run spotify_server.js on your PC"
 							art.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
 						end
+						if library._music_overlay_update then library._music_overlay_update() end
 					end
-					task.wait(2)
+					task.wait(1)
 				end
 			end
 
@@ -3877,13 +3893,18 @@
 			self:button({name = "Spotify Sync", callback = function()
 				cfg.spotify_on = not cfg.spotify_on
 				if cfg.spotify_on then
+					library._spotify_active = true
 					cfg.spotify_last_song = ""
 					library:notification({text = "Spotify sync started - polling localhost:3000", time = 3})
 					task.spawn(spotify_poll)
 				else
+					library._spotify_active = false
+					cfg.spotify_track = nil
+					library._spotify_track = nil
 					library:notification({text = "Spotify sync stopped", time = 2})
 					title.Text = "Spotify sync stopped"
 					subtitle.Text = ""
+					if library._music_overlay_update then library._music_overlay_update() end
 				end
 			end})
 
