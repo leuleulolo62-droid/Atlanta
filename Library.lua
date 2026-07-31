@@ -6723,7 +6723,6 @@
 					})
 					library:apply_theme(search_box, "inline", "BackgroundColor3")
 					library:apply_theme(search_box, "text", "TextColor3")
-					library:apply_theme(search_box, "text", "PlaceholderColor3")
 					library:create("UIPadding", {
 						Parent = search_box,
 						PaddingLeft = dim(0, 5),
