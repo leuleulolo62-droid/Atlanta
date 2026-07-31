@@ -2153,7 +2153,11 @@
 
 				local overlay_frame = Instance.new("Frame")
 				overlay_frame.Name = ""
-				overlay_frame.BackgroundTransparency = 1
+				-- A subtle panel makes the overlay identifiable even before a track and
+				-- artwork have loaded; a fully transparent frame looked like no overlay.
+				overlay_frame.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+				overlay_frame.BackgroundTransparency = 0.2
+				overlay_frame.BorderSizePixel = 0
 				overlay_frame.Size = UDim2.new(0, 280, 0, 80)
 				-- load saved position
 				local ov_saved_pos = nil
@@ -2170,6 +2174,19 @@
 				overlay_frame.Active = true
 				overlay_frame.Visible = true
 				overlay_frame.Parent = overlay_gui
+				local function keep_overlay_on_screen()
+					local camera = workspace.CurrentCamera
+					if not camera then return end
+					local viewport = camera.ViewportSize
+					local absolute = overlay_frame.AbsolutePosition
+					if absolute.X < 0 or absolute.Y < 0 or absolute.X + overlay_frame.AbsoluteSize.X > viewport.X or absolute.Y + overlay_frame.AbsoluteSize.Y > viewport.Y then
+						overlay_frame.Position = UDim2.fromOffset(
+							math.clamp(absolute.X, 0, math.max(0, viewport.X - overlay_frame.AbsoluteSize.X)),
+							math.clamp(absolute.Y, 0, math.max(0, viewport.Y - overlay_frame.AbsoluteSize.Y))
+						)
+					end
+				end
+				task.spawn(function() task.wait() keep_overlay_on_screen() end)
 
 				local overlay_art = Instance.new("ImageLabel")
 				overlay_art.Name = ""
@@ -2300,6 +2317,7 @@
 						pcall(function() overlay_gui.Parent = overlay_parent or coregui end)
 					end
 					overlay_gui.Enabled = true
+					task.spawn(function() task.wait() keep_overlay_on_screen() end)
 					if overlay_conn then overlay_conn:Disconnect() end
 					overlay_conn = library:connection(run.Heartbeat, refresh_overlay)
 					refresh_overlay()
@@ -3867,7 +3885,8 @@
 
 			local function spotify_download_art(url)
 				if not url or url == "" then return nil end
-				if not writefile or not getcustomasset then return nil end
+				local asset_loader = getcustomasset or getsynasset
+				if not writefile or type(asset_loader) ~= "function" then return nil end
 				cfg.spotify_art_cache = cfg.spotify_art_cache or {}
 				if cfg.spotify_art_cache[url] then return cfg.spotify_art_cache[url] end
 				local hash = 0
@@ -3886,12 +3905,12 @@
 					if not body then body = game:HttpGet(url) end
 					if body and #body > 0 then writefile(art_path, body) end
 				end)
-				if isfile and isfile(art_path) then
-					local ok, asset = pcall(getcustomasset, art_path)
-					if ok and asset then
-						cfg.spotify_art_cache[url] = asset
-						return asset
-					end
+				-- isfile is absent on some executors even though writefile and the asset
+				-- loader are available. Try the loader directly instead of rejecting art.
+				local ok, asset = pcall(asset_loader, art_path)
+				if ok and asset then
+					cfg.spotify_art_cache[url] = asset
+					return asset
 				end
 				return nil
 			end
