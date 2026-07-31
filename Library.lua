@@ -2132,10 +2132,15 @@
 				overlay_gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 				overlay_gui.IgnoreGuiInset = true
 				overlay_gui.Enabled = false
-				-- gethui can exist but reject parenting on some executors. Resolve it
-				-- first, then fall back to CoreGui and finally PlayerGui.
+				-- PlayerGui is the reliable visible layer. Some executors return a
+				-- gethui object that accepts the GUI but never renders it, which made
+				-- the toggle appear to work while the overlay stayed invisible.
 				local overlay_parent
-				pcall(function() if gethui then overlay_parent = gethui() end end)
+				pcall(function()
+					local player = game:GetService("Players").LocalPlayer
+					overlay_parent = player and (player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui", 5))
+				end)
+				if not overlay_parent then pcall(function() if gethui then overlay_parent = gethui() end end) end
 				if not overlay_parent then overlay_parent = coregui end
 				local parent_ok = pcall(function() overlay_gui.Parent = overlay_parent end)
 				if not parent_ok or not overlay_gui.Parent then
@@ -3684,8 +3689,11 @@
 				if track then
 					local pos = (tonumber(track.positionMs) or 0) / 1000
 					local len = (tonumber(track.durationMs) or 0) / 1000
-					if track.isPlaying and track.receivedAt then
-						pos = pos + math.max(0, os.clock() - track.receivedAt)
+					if track.isPlaying then
+						-- sampledAt is from the local bridge and removes the up-to-one-second
+						-- polling delay. receivedAt keeps the clock advancing between polls.
+						pos = pos + (tonumber(track.sourceAge) or 0)
+						if track.receivedAt then pos = pos + math.max(0, os.clock() - track.receivedAt) end
 					end
 					if len > 0 then pos = math.clamp(pos, 0, len) end
 					return pos, len, "spotify"
@@ -3835,6 +3843,7 @@
 						song = tostring(decoded.song or ""), artist = tostring(decoded.artist or ""),
 						albumArt = tostring(decoded.albumArt or ""), isPlaying = decoded.isPlaying == true,
 						positionMs = tonumber(decoded.positionMs) or 0, durationMs = tonumber(decoded.durationMs) or 0,
+						sampledAt = tonumber(decoded.sampledAt) or 0,
 						error = decoded.error == true,
 					}
 				end
@@ -3852,20 +3861,37 @@
 					error = has_error,
 					positionMs = tonumber(body:match('"positionMs":(%d+)')) or 0,
 					durationMs = tonumber(body:match('"durationMs":(%d+)')) or 0,
+					sampledAt = tonumber(body:match('"sampledAt":(%d+)')) or 0,
 				}
 			end
 
 			local function spotify_download_art(url)
 				if not url or url == "" then return nil end
 				if not writefile or not getcustomasset then return nil end
-				local art_path = "S43_spotify_art.jpg"
+				cfg.spotify_art_cache = cfg.spotify_art_cache or {}
+				if cfg.spotify_art_cache[url] then return cfg.spotify_art_cache[url] end
+				local hash = 0
+				for i = 1, #url do hash = (hash * 31 + string.byte(url, i)) % 2147483647 end
+				local art_path = "S43_spotify_art_" .. tostring(hash) .. ".jpg"
+				local body
 				pcall(function()
-					local body = game:HttpGet(url)
-					writefile(art_path, body)
+					local env = getgenv and getgenv() or {}
+					local request = (typeof(env.request) == "function" and env.request)
+						or (typeof(env.http_request) == "function" and env.http_request)
+						or (env.syn and env.syn.request)
+					if request then
+						local response = request({Url = url, Method = "GET"})
+						body = response and response.Body
+					end
+					if not body then body = game:HttpGet(url) end
+					if body and #body > 0 then writefile(art_path, body) end
 				end)
 				if isfile and isfile(art_path) then
 					local ok, asset = pcall(getcustomasset, art_path)
-					if ok and asset then return asset end
+					if ok and asset then
+						cfg.spotify_art_cache[url] = asset
+						return asset
+					end
 				end
 				return nil
 			end
@@ -3898,10 +3924,15 @@
 					if body then
 						local track = spotify_parse(body)
 						if track then
+							if track.sampledAt > 0 and DateTime and DateTime.now then
+								track.sourceAge = math.clamp((DateTime.now().UnixTimestampMillis - track.sampledAt) / 1000, 0, 2)
+							else
+								track.sourceAge = 0
+							end
 							track.receivedAt = os.clock()
 							cfg.spotify_track = track
 							library._spotify_track = track
-							local trackKey = track.song .. "\0" .. track.artist .. "\0" .. tostring(track.isPlaying)
+							local trackKey = track.song .. "\0" .. track.artist .. "\0" .. tostring(track.isPlaying) .. "\0" .. track.albumArt
 							if trackKey ~= cfg.spotify_last_song then
 								cfg.spotify_last_song = trackKey
 								spotify_update_display(track)
