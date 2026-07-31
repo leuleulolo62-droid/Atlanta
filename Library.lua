@@ -4007,7 +4007,23 @@
 					if library._music_overlay_update then library._music_overlay_update() end
 				end
 			end})
-
+			self:button({name = "Disable Spotify Sync", callback = function()
+				if not cfg.spotify_on then
+					library:notification({text = "Spotify sync is already disabled", time = 2})
+					return
+				end
+				-- The poll loop tests this flag on every pass, so this immediately
+				-- disconnects the in-game player from the local Spotify bridge.
+				cfg.spotify_on = false
+				library._spotify_active = false
+				cfg.spotify_track = nil
+				library._spotify_track = nil
+				title.Text = "Spotify sync disabled"
+				subtitle.Text = ""
+				if library._music_overlay_update then library._music_overlay_update() end
+				library:notification({text = "Spotify sync disabled", time = 2})
+			end})
+			
 			return setmetatable(cfg, library)
 		end
 
