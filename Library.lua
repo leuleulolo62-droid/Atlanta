@@ -1429,6 +1429,66 @@
 				Enabled = false
 			})
 
+			-- Menu cursor. Two copies of Roblox's alpha-masked arrow are layered so
+			-- the larger rear copy becomes a clean accent-coloured outline while the
+			-- front remains black. Keeping this inside the library makes it follow the
+			-- actual window state instead of guessing whether a consumer menu is open.
+			local cursor_gui = library:create("ScreenGui", {
+				Parent = gethui(),
+				Name = "AtlantaCursor",
+				DisplayOrder = 2147483647,
+				IgnoreGuiInset = true,
+				ZIndexBehavior = Enum.ZIndexBehavior.Global,
+				Enabled = true
+			})
+			local cursor_texture = "rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png"
+			local cursor_outline = library:create("ImageLabel", {
+				Parent = cursor_gui,
+				Name = "Outline",
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Image = cursor_texture,
+				ImageColor3 = themes.preset.accent,
+				Size = dim2(0, 30, 0, 30),
+				Position = dim2(0, -2, 0, -2),
+				ZIndex = 1
+			})
+			library:apply_theme(cursor_outline, "accent", "ImageColor3")
+			local cursor_fill = library:create("ImageLabel", {
+				Parent = cursor_gui,
+				Name = "Fill",
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Image = cursor_texture,
+				ImageColor3 = rgb(0, 0, 0),
+				Size = dim2(0, 26, 0, 26),
+				Position = dim2(0, 0, 0, 0),
+				ZIndex = 2
+			})
+			local cursor_owns_mouse = false
+			library:connection(run.RenderStepped, function()
+				local show = window.opened and uis.MouseBehavior ~= Enum.MouseBehavior.LockCenter
+				cursor_gui.Enabled = show
+				getgenv().__AtlantaMenuCursorVisible = show
+				if not show then
+					if cursor_owns_mouse then
+						uis.MouseIconEnabled = true
+						cursor_owns_mouse = false
+					end
+					return
+				end
+
+				if uis.MouseIconEnabled then uis.MouseIconEnabled = false end
+				cursor_owns_mouse = true
+				local position = uis:GetMouseLocation()
+				cursor_outline.Position = dim2(0, position.X - 2, 0, position.Y - 2)
+				cursor_fill.Position = dim2(0, position.X, 0, position.Y)
+			end)
+			library:on_unload(function()
+				getgenv().__AtlantaMenuCursorVisible = nil
+				if cursor_owns_mouse then uis.MouseIconEnabled = true end
+			end)
+
 			local function build_particle_holder(count, particle_builder)
 				local holder = library:create("Frame", {
 					Parent = fx_gui,
@@ -1596,6 +1656,7 @@
 				library.cache.Enabled = false
 
 				set_fx_enabled(bool)
+				cursor_gui.Enabled = bool
 
 				for _,tooltip in tooltip_sgui:GetChildren() do
 					tooltip.Visible = false;
