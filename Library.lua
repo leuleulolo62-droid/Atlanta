@@ -138,7 +138,8 @@
 		utility = {
 			["outline"] = {
 				["BackgroundColor3"] = {}, 	
-				["Color"] = {}, 
+				["Color"] = {},
+				["ImageColor3"] = {},
 			},
 			["inline"] = {
 				["BackgroundColor3"] = {}, 	
@@ -1442,29 +1443,42 @@
 				Enabled = true
 			})
 			local cursor_texture = "rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png"
+			-- ArrowFarCursor is a 64x64 texture whose visible pixels only occupy
+			-- x=27..47, y=31..59. Crop that transparent padding and anchor both
+			-- layers at the original 32,32 hotspot so the visible tip is the click.
+			local cursor_rect_offset = vec2(27, 31)
+			local cursor_rect_size = vec2(21, 29)
+			local cursor_hotspot = vec2(5 / 21, 1 / 29)
 			local cursor_outline = library:create("ImageLabel", {
 				Parent = cursor_gui,
 				Name = "Outline",
+				AnchorPoint = cursor_hotspot,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Image = cursor_texture,
+				ImageColor3 = themes.preset.outline,
+				ImageRectOffset = cursor_rect_offset,
+				ImageRectSize = cursor_rect_size,
+				Size = dim2(0, 42, 0, 58),
+				Position = dim2(0, 0, 0, 0),
+				ZIndex = 1
+			})
+			library:apply_theme(cursor_outline, "outline", "ImageColor3")
+			local cursor_fill = library:create("ImageLabel", {
+				Parent = cursor_gui,
+				Name = "Fill",
+				AnchorPoint = cursor_hotspot,
 				BackgroundTransparency = 1,
 				BorderSizePixel = 0,
 				Image = cursor_texture,
 				ImageColor3 = themes.preset.accent,
-				Size = dim2(0, 30, 0, 30),
-				Position = dim2(0, -2, 0, -2),
-				ZIndex = 1
-			})
-			library:apply_theme(cursor_outline, "accent", "ImageColor3")
-			local cursor_fill = library:create("ImageLabel", {
-				Parent = cursor_gui,
-				Name = "Fill",
-				BackgroundTransparency = 1,
-				BorderSizePixel = 0,
-				Image = cursor_texture,
-				ImageColor3 = rgb(0, 0, 0),
-				Size = dim2(0, 26, 0, 26),
+				ImageRectOffset = cursor_rect_offset,
+				ImageRectSize = cursor_rect_size,
+				Size = dim2(0, 36, 0, 50),
 				Position = dim2(0, 0, 0, 0),
 				ZIndex = 2
 			})
+			library:apply_theme(cursor_fill, "accent", "ImageColor3")
 			local cursor_owns_mouse = false
 			library:connection(run.RenderStepped, function()
 				local show = window.opened and uis.MouseBehavior ~= Enum.MouseBehavior.LockCenter
@@ -1482,7 +1496,7 @@
 				if uis.MouseIconEnabled then uis.MouseIconEnabled = false end
 				cursor_owns_mouse = true
 				local position = uis:GetMouseLocation()
-				cursor_outline.Position = dim2(0, position.X - 2, 0, position.Y - 2)
+				cursor_outline.Position = dim2(0, position.X, 0, position.Y)
 				cursor_fill.Position = dim2(0, position.X, 0, position.Y)
 			end)
 			library:on_unload(function()
