@@ -1414,6 +1414,9 @@
 				Enabled = true;
 				Size = 15
 			});    
+			library:on_unload(function()
+				pcall(function() blur:Destroy() end)
+			end)
 
 			library.cache = library:create("ScreenGui", {
 				Enabled = false,
@@ -2554,7 +2557,10 @@
 						library:load_config(library.old_config)
 					end})
 					section:button({name = "Unload Menu", callback = function()
-						library:load_config(library.old_config)
+						-- A bad/missing old config must never abort teardown.
+						pcall(function()
+							if library.old_config then library:load_config(library.old_config) end
+						end)
 
 						-- A consumer such as Site 43 owns more than the library itself, so
 						-- let its master lifecycle restore hooks, cursor state and external
@@ -2562,10 +2568,29 @@
 						local master_unload = getgenv and getgenv().__S43MasterUnload
 						if type(master_unload) == "function" then
 							pcall(master_unload)
-						else
-							library:unload()
-							pcall(function() blur:Destroy() end)
 						end
+
+						-- Always finish the library-local teardown too. This is idempotent
+						-- when the master already called it and is the fallback when it was
+						-- unavailable, locked, or raised inside an executor primitive.
+						pcall(function() library:unload() end)
+						pcall(function() blur:Destroy() end)
+						pcall(function()
+							if getgenv and getgenv().__S43LeftLogo then
+								getgenv().__S43LeftLogo:Destroy()
+								getgenv().__S43LeftLogo = nil
+							end
+						end)
+						pcall(function()
+							if _G and _G.__S43MusicOverlayGui then
+								_G.__S43MusicOverlayGui:Destroy()
+								_G.__S43MusicOverlayGui = nil
+							end
+						end)
+						pcall(function()
+							uis.MouseBehavior = Enum.MouseBehavior.Default
+							uis.MouseIconEnabled = true
+						end)
 					end})
 			--
 
