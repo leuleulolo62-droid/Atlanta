@@ -1489,7 +1489,7 @@
 			end
 			set_cursor_size(28)
 			local cursor_owns_mouse = false
-			library:connection(run.RenderStepped, function()
+			local cursor_connection = library:connection(run.RenderStepped, function()
 				local show = window.opened and flags["custom_menu_cursor"] ~= false
 					and uis.MouseBehavior ~= Enum.MouseBehavior.LockCenter
 				cursor_gui.Enabled = show
@@ -1510,9 +1510,22 @@
 				cursor_fill.Position = dim2(0, position.X, 0, position.Y)
 			end)
 			library:on_unload(function()
+				-- Stop the frame owner before restoring MouseIconEnabled. Restoring it
+				-- first allowed one final RenderStepped callback to hide it again.
+				pcall(function() cursor_connection:Disconnect() end)
+				pcall(function() cursor_gui.Enabled = false end)
+				cursor_owns_mouse = false
 				getgenv().__AtlantaMenuCursorVisible = nil
 				getgenv().__AtlantaHideWindowsCursor = nil
 				uis.MouseIconEnabled = true
+				-- A consumer may tear down its own cursor/menu loop immediately after
+				-- Atlanta. Re-assert visibility for a few frames after every owner is gone.
+				task.defer(function()
+					for _ = 1, 4 do
+						run.RenderStepped:Wait()
+						pcall(function() uis.MouseIconEnabled = true end)
+					end
+				end)
 			end)
 
 			local function build_particle_holder(count, particle_builder)
