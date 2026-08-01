@@ -2556,68 +2556,16 @@
 					section:button({name = "Unload Menu", callback = function()
 						library:load_config(library.old_config)
 
-						for _, gui in library.guis do
-							gui:Destroy()
+						-- A consumer such as Site 43 owns more than the library itself, so
+						-- let its master lifecycle restore hooks, cursor state and external
+						-- overlays. Standalone Atlanta still uses its tracked unload method.
+						local master_unload = getgenv and getgenv().__S43MasterUnload
+						if type(master_unload) == "function" then
+							pcall(master_unload)
+						else
+							library:unload()
+							pcall(function() blur:Destroy() end)
 						end
-
-						for _, connection in library.connections do
-							connection:Disconnect()
-						end
-
-						-- stop + destroy the music player's sound so it doesn't keep
-						-- playing after unload (it lives in SoundService, not in
-						-- library.guis, so the gui loop above doesn't reach it).
-						if library._music_sound then
-							pcall(function() library._music_sound:Stop() end)
-							pcall(function() library._music_sound:Destroy() end)
-							library._music_sound = nil
-						end
-
-						-- destroy the S43 left logo (created by the S43 script, not by
-						-- the library, so library.guis doesn't contain it). Without this
-						-- the logo survives Unload Menu -- the "left image doesn't unload" bug.
-						pcall(function()
-							if getgenv and getgenv().__S43LeftLogo then
-								getgenv().__S43LeftLogo:Destroy()
-								getgenv().__S43LeftLogo = nil
-							end
-						end)
-						-- also scan gethui/CoreGui/PlayerGui for any S43Logo that cloneref
-						-- might have split from the stored reference
-						pcall(function()
-							local function scan(parent)
-								if not parent then return end
-								for _, g in pairs(parent:GetChildren()) do
-									if g.Name == "S43Logo" then g:Destroy() end
-								end
-							end
-							if gethui then scan(gethui()) end
-							scan(game:GetService("CoreGui"))
-							local lp = game:GetService("Players").LocalPlayer
-							local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
-							scan(pg)
-						end)
-
-						-- destroy the music overlay (it's a raw Instance.new, NOT in
-						-- library.guis, so the gui loop above doesn't reach it). Destroy via
-						-- the stored _G ref first (cloneref-safe), then scan by name.
-						pcall(function() if _G and _G.__S43MusicOverlayGui then _G.__S43MusicOverlayGui:Destroy() end end)
-						if _G then _G.__S43MusicOverlayGui = nil end
-						pcall(function()
-							local function scan(parent)
-								if not parent then return end
-								for _, g in pairs(parent:GetChildren()) do
-									if g.Name == "S43MusicOverlay" then g:Destroy() end
-								end
-							end
-							if gethui then scan(gethui()) end
-							scan(game:GetService("CoreGui"))
-							local lp = game:GetService("Players").LocalPlayer
-							local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
-							scan(pg)
-						end)
-
-						blur:Destroy()
 					end})
 			--
 
