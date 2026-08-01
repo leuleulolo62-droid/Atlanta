@@ -1471,10 +1471,11 @@
 				cursor_gui.Enabled = show
 				getgenv().__AtlantaMenuCursorVisible = show
 				if not show then
-					if cursor_owns_mouse then
-						uis.MouseIconEnabled = true
-						cursor_owns_mouse = false
+					local hide_windows_cursor = flags["hide_windows_cursor"] == true
+					if uis.MouseIconEnabled == hide_windows_cursor then
+						uis.MouseIconEnabled = not hide_windows_cursor
 					end
+					cursor_owns_mouse = false
 					return
 				end
 
@@ -1486,7 +1487,8 @@
 			end)
 			library:on_unload(function()
 				getgenv().__AtlantaMenuCursorVisible = nil
-				if cursor_owns_mouse then uis.MouseIconEnabled = true end
+				getgenv().__AtlantaHideWindowsCursor = nil
+				uis.MouseIconEnabled = true
 			end)
 
 			local function build_particle_holder(count, particle_builder)
@@ -2100,6 +2102,10 @@
 				end})
 				section:toggle({name = "Watermark", flag = "watermark", callback = function(bool)
 					watermark.set_visible(bool)
+				end})
+				section:toggle({name = "Hide Windows Cursor", flag = "hide_windows_cursor", callback = function(bool)
+					getgenv().__AtlantaHideWindowsCursor = bool
+					if not window.opened then uis.MouseIconEnabled = not bool end
 				end})
 				section:button_holder({})
 				section:button({name = "Panic", callback = function()
