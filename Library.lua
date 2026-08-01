@@ -1459,7 +1459,7 @@
 				ImageColor3 = themes.preset.outline,
 				ImageRectOffset = cursor_rect_offset,
 				ImageRectSize = cursor_rect_size,
-				Size = dim2(0, 42, 0, 58),
+				Size = dim2(0, 32, 0, 44),
 				Position = dim2(0, 0, 0, 0),
 				ZIndex = 1
 			})
@@ -1474,14 +1474,24 @@
 				ImageColor3 = themes.preset.accent,
 				ImageRectOffset = cursor_rect_offset,
 				ImageRectSize = cursor_rect_size,
-				Size = dim2(0, 36, 0, 50),
+				Size = dim2(0, 28, 0, 39),
 				Position = dim2(0, 0, 0, 0),
 				ZIndex = 2
 			})
 			library:apply_theme(cursor_fill, "accent", "ImageColor3")
+			local function set_cursor_size(value)
+				local width = clamp(tonumber(value) or 28, 16, 44)
+				local height = round(width * cursor_rect_size.Y / cursor_rect_size.X)
+				local outline_width = width + 4
+				local outline_height = round(outline_width * cursor_rect_size.Y / cursor_rect_size.X)
+				cursor_fill.Size = dim2(0, width, 0, height)
+				cursor_outline.Size = dim2(0, outline_width, 0, outline_height)
+			end
+			set_cursor_size(28)
 			local cursor_owns_mouse = false
 			library:connection(run.RenderStepped, function()
-				local show = window.opened and uis.MouseBehavior ~= Enum.MouseBehavior.LockCenter
+				local show = window.opened and flags["custom_menu_cursor"] ~= false
+					and uis.MouseBehavior ~= Enum.MouseBehavior.LockCenter
 				cursor_gui.Enabled = show
 				getgenv().__AtlantaMenuCursorVisible = show
 				if not show then
@@ -2116,6 +2126,10 @@
 				end})
 				section:toggle({name = "Watermark", flag = "watermark", callback = function(bool)
 					watermark.set_visible(bool)
+				end})
+				section:toggle({name = "Custom Cursor", flag = "custom_menu_cursor", default = true})
+				section:slider({name = "Cursor Size", flag = "cursor_size", min = 16, max = 44, default = 28, interval = 1, callback = function(value)
+					set_cursor_size(value)
 				end})
 				section:toggle({name = "Hide Windows Cursor", flag = "hide_windows_cursor", callback = function(bool)
 					getgenv().__AtlantaHideWindowsCursor = bool
