@@ -2990,34 +2990,47 @@
 					local charPos = Vector3.new(0, 1 - cfg.frame_offset_y, 0)
 					local camPos = charPos + (angle(0, math.rad(cfg.rotation), 0) * Vector3.new(0, 0, -cfg.distance * cfg.zoom))
 					items.camera.CFrame = cfr(camPos, charPos)
-						-- Skeleton preview: thin Neon parts connecting the clone's R6
-						-- joint centres, following the Walk/Jump animation. Lazy-built once.
+						-- Skeleton preview: keep bones in the WorldModel permanently and hide
+						-- them with Transparency. Moving an instance back to library.cache after
+						-- the preview is destroyed causes Roblox's "Parent property is locked"
+						-- error from this RenderStepped callback.
+						local function new_skeleton_bone()
+							return library:create("Part", {
+								Parent = items.world_model; Name = "\0";
+								Anchored = true; CanCollide = false; CanQuery = false; CanTouch = false;
+								Material = Enum.Material.Neon; Color = rgb(255, 255, 255);
+								Size = vec3(0.12, 0.12, 1); Transparency = 1;
+							})
+						end
 						if not cfg._skel then
 							cfg._skel = {}
 							cfg._skel_pairs = { {"Head", "Torso"}, {"Torso", "Left Arm"}, {"Torso", "Right Arm"}, {"Torso", "Left Leg"}, {"Torso", "Right Leg"} }
-							for i = 1, #cfg._skel_pairs do
-								cfg._skel[i] = library:create("Part", {
-									Parent = library.cache; Name = "\0";
-									Anchored = true; CanCollide = false; CanQuery = false; CanTouch = false;
-									Material = Enum.Material.Neon; Color = rgb(255, 255, 255); Size = vec3(0.12, 0.12, 1);
-								})
-							end
+							for i = 1, #cfg._skel_pairs do cfg._skel[i] = new_skeleton_bone() end
 						end
 						do
 							local show = fget("Skeleton", false)
 							local color = fcolor("Skeleton_Color", rgb(255, 255, 255))
 							for i, pr in ipairs(cfg._skel_pairs) do
 								local a, b = character:FindFirstChild(pr[1]), character:FindFirstChild(pr[2])
-								local bone = cfg._skel[i]
-								if show and a and b then
-									local pa, pb = a.Position, b.Position
-									bone.Size = vec3(0.12, 0.12, (pb - pa).Magnitude)
-									bone.CFrame = cfr((pa + pb) / 2, pb)
-									bone.Color = color
-									if bone.Parent ~= items.world_model then bone.Parent = items.world_model end
-								elseif bone.Parent ~= library.cache then
-									bone.Parent = library.cache
-								end
+							local bone = cfg._skel[i]
+							-- An unload may have destroyed the old preview parts while this
+							-- callback is finishing. Recreate the one invalid bone instead of
+							-- attempting to re-parent a destroyed/locked instance.
+							local read_ok, parent = bone and pcall(function() return bone.Parent end)
+							local valid = read_ok and parent ~= nil
+							if not valid then
+								bone = new_skeleton_bone()
+								cfg._skel[i] = bone
+							end
+							if show and a and b then
+								local pa, pb = a.Position, b.Position
+								bone.Size = vec3(0.12, 0.12, (pb - pa).Magnitude)
+								bone.CFrame = cfr((pa + pb) / 2, pb)
+								bone.Color = color
+								bone.Transparency = 0
+							else
+								bone.Transparency = 1
+							end
 							end
 						end
 				end)
