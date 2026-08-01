@@ -5391,6 +5391,8 @@
 			library:hoverify(toggle_holder, toggle)
 
 			function cfg.set(bool)
+				bool = bool and true or false
+				cfg.enabled = bool
 				library:tween(accent, {BackgroundTransparency = bool and 0 or 1})
 				flags[cfg.flag] = bool
 				
