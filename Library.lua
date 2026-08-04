@@ -4124,10 +4124,37 @@
 				end
 			end
 
-			self:button_holder({})
-			self:button({name = "Spotify Sync", callback = function()
-				cfg.spotify_on = not cfg.spotify_on
-				if cfg.spotify_on then
+			-- SPOTIFY AUTO SYNC. This used to be two buttons (Spotify Sync / Disable
+			-- Spotify Sync) with no persistence at all -- every single script run
+			-- needed a fresh manual click before sync would start. Replaced with one
+			-- proper flagged toggle so it (a) saves/loads through the exact same config
+			-- Save/Load system every other setting in this menu already uses (flag =
+			-- "spotify_auto_sync" registers it in library.config_flags automatically,
+			-- same as every toggle/slider/dropdown in this file), and (b) also mirrors
+			-- its own state to one small dedicated file so it comes back ON BY ITSELF
+			-- the next time this script runs, without needing a config to be manually
+			-- loaded first -- that's the actual "auto" part. Both persistence paths
+			-- write the same boolean; either one alone would cover a different restore
+			-- flow (a saved/loaded named config vs. just re-running the script), so both
+			-- are kept rather than picking one.
+			local autosync_path = library.directory .. "/spotify_autosync.cfg"
+			local function spotify_autosync_write(bool)
+				if type(writefile) ~= "function" then return end
+				pcall(function() writefile(autosync_path, bool and "1" or "0") end)
+			end
+			local function spotify_autosync_read()
+				if type(isfile) == "function" then
+					local ok, exists = pcall(isfile, autosync_path)
+					if not ok or not exists then return false end
+				end
+				if type(readfile) ~= "function" then return false end
+				local ok, body = pcall(readfile, autosync_path)
+				return ok and body == "1"
+			end
+
+			local function spotify_set_enabled(bool)
+				cfg.spotify_on = bool
+				if bool then
 					library._spotify_active = true
 					cfg.spotify_last_song = ""
 					-- Do not leave an old Roblox asset playing underneath Spotify.
@@ -4135,32 +4162,37 @@
 					library:notification({text = "Spotify sync started - polling localhost:3000", time = 3})
 					task.spawn(spotify_poll)
 				else
+					-- The poll loop tests cfg.spotify_on on every pass, so clearing it here
+					-- immediately disconnects the in-game player from the local bridge --
+					-- same effect the old dedicated "Disable" button had, now just "turn
+					-- the toggle off" instead of a second, easy-to-forget button.
 					library._spotify_active = false
 					cfg.spotify_track = nil
 					library._spotify_track = nil
-					library:notification({text = "Spotify sync stopped", time = 2})
 					title.Text = "Spotify sync stopped"
 					subtitle.Text = ""
 					if library._music_overlay_update then library._music_overlay_update() end
+					library:notification({text = "Spotify sync stopped", time = 2})
 				end
+				spotify_autosync_write(bool)
+			end
+
+			self:button_holder({})
+			local spotify_toggle = self:toggle({name = "Spotify Auto Sync", flag = "spotify_auto_sync", default = false, callback = function(bool)
+				spotify_set_enabled(bool)
 			end})
-			self:button({name = "Disable Spotify Sync", callback = function()
-				if not cfg.spotify_on then
-					library:notification({text = "Spotify sync is already disabled", time = 2})
-					return
-				end
-				-- The poll loop tests this flag on every pass, so this immediately
-				-- disconnects the in-game player from the local Spotify bridge.
-				cfg.spotify_on = false
-				library._spotify_active = false
-				cfg.spotify_track = nil
-				library._spotify_track = nil
-				title.Text = "Spotify sync disabled"
-				subtitle.Text = ""
-				if library._music_overlay_update then library._music_overlay_update() end
-				library:notification({text = "Spotify sync disabled", time = 2})
-			end})
-			
+
+			-- Auto-restore: if it was on the last time this script ran, turn it back on
+			-- right now -- through the toggle's own .set so the checkbox visually shows
+			-- ON too, not just the underlying sync state. Deferred one frame so the panel
+			-- has finished laying out first.
+			if spotify_autosync_read() and spotify_toggle and spotify_toggle.set then
+				task.spawn(function()
+					task.wait()
+					spotify_toggle.set(true)
+				end)
+			end
+
 			return setmetatable(cfg, library)
 		end
 
