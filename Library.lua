@@ -4497,21 +4497,30 @@
 
 			local holder = path or self.holder
 
-			local column = library:create("Frame", {
+			-- Let sections keep a readable, content-based height. VerticalFlex.Fill
+			-- divided the viewport equally and crushed busy groupboxes when a column
+			-- contained several sections. The column now scrolls instead.
+			local column = library:create("ScrollingFrame", {
 				Parent = holder,
 				BackgroundTransparency = 1,
 				Name = "\0",
 				BorderColor3 = rgb(0, 0, 0),
 				Size = dim2(1, 0, 1, 0),
 				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.inline
+				BackgroundColor3 = themes.preset.inline,
+				Active = true,
+				AutomaticCanvasSize = Enum.AutomaticSize.Y,
+				CanvasSize = dim2(0, 0, 0, 0),
+				ScrollingDirection = Enum.ScrollingDirection.Y,
+				ScrollBarThickness = 2,
+				ScrollBarImageColor3 = themes.preset.accent,
 			}) library:apply_theme(column, "inline", "BackgroundColor3")
+			library:apply_theme(column, "accent", "ScrollBarImageColor3")
 
 			library:create("UIListLayout", {
 				Parent = column,
 				Padding = dim(0, 4),
 				SortOrder = Enum.SortOrder.LayoutOrder,
-				VerticalFlex = Enum.UIFlexAlignment.Fill
 			})
 
 			cfg["holder"] = column
@@ -4767,7 +4776,9 @@
 				Parent = self.holder,
 				Name = "\0",
 				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 1, 0),
+				-- Updated from its controls below; this initial size prevents a
+				-- one-frame collapsed groupbox while the controls are being created.
+				Size = dim2(1, 0, 0, 82),
 				BorderSizePixel = 0,
 				BackgroundColor3 = themes.preset.inline
 			}) library:apply_theme(section, "inline", "BackgroundColor3") 
@@ -4875,7 +4886,7 @@
 			})
 			cfg.holder = elements
 
-			library:create("UIListLayout", {
+			local element_layout = library:create("UIListLayout", {
 				Parent = elements,
 				Padding = dim(0, 8),
 				HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -4886,6 +4897,17 @@
 				Parent = ScrollingFrame,
 				PaddingBottom = dim(0, 10)
 			})
+
+			-- Fit normal groupboxes to their controls. Large groups stop growing at
+			-- 360 px and use their existing inner ScrollingFrame, while the outer
+			-- column scrolls between groupboxes. This avoids both crushed boxes and
+			-- a single enormous group consuming the whole tab.
+			local function update_section_height()
+				local content_height = element_layout.AbsoluteContentSize.Y
+				section.Size = dim2(1, 0, 0, clamp(content_height + 32, 82, 360))
+			end
+			library:connection(element_layout:GetPropertyChangedSignal("AbsoluteContentSize"), update_section_height)
+			task.defer(update_section_height)
 
 			-- Drag-to-reorder, opt-in per column (see library:column). The
 			-- indicator's position is driven by LayoutOrder (half-steps between
