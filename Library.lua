@@ -4434,8 +4434,11 @@
 				library:apply_theme(text, "accent", "TextColor3")
 			-- 
 
-			-- section instances 
-				local section_holder = library:create("Frame", {
+			-- section instances
+				-- The whole tab owns one vertical scrollbar on its far-right edge. Both
+				-- columns are children of this canvas, so they move together instead of
+				-- showing a separate scrollbar on each side.
+				local section_holder = library:create("ScrollingFrame", {
 					Parent = library.section_holder,
 					BackgroundTransparency = 1,
 					Name = "\0",
@@ -4443,8 +4446,14 @@
 					Size = dim2(1, 0, 1, 0),
 					BorderSizePixel = 0,
 					Visible = false,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
+					BackgroundColor3 = rgb(255, 255, 255),
+					Active = true,
+					AutomaticCanvasSize = Enum.AutomaticSize.Y,
+					CanvasSize = dim2(0, 0, 0, 0),
+					ScrollingDirection = Enum.ScrollingDirection.Y,
+					ScrollBarThickness = 2,
+					ScrollBarImageColor3 = themes.preset.accent,
+				}) library:apply_theme(section_holder, "accent", "ScrollBarImageColor3")
 			
 				cfg["holder"] = section_holder
 
@@ -4497,31 +4506,30 @@
 
 			local holder = path or self.holder
 
-			-- Let sections keep a readable, content-based height. VerticalFlex.Fill
-			-- divided the viewport equally and crushed busy groupboxes when a column
-			-- contained several sections. The column now scrolls instead.
-			local column = library:create("ScrollingFrame", {
+			-- Columns contain content but do not scroll independently. Their height
+			-- follows their sections; the parent tab canvas provides the sole scrollbar.
+			local column = library:create("Frame", {
 				Parent = holder,
 				BackgroundTransparency = 1,
 				Name = "\0",
 				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 1, 0),
+				Size = dim2(1, 0, 0, 0),
 				BorderSizePixel = 0,
 				BackgroundColor3 = themes.preset.inline,
-				Active = true,
-				AutomaticCanvasSize = Enum.AutomaticSize.Y,
-				CanvasSize = dim2(0, 0, 0, 0),
-				ScrollingDirection = Enum.ScrollingDirection.Y,
-				ScrollBarThickness = 2,
-				ScrollBarImageColor3 = themes.preset.accent,
 			}) library:apply_theme(column, "inline", "BackgroundColor3")
-			library:apply_theme(column, "accent", "ScrollBarImageColor3")
 
-			library:create("UIListLayout", {
+			local column_layout = library:create("UIListLayout", {
 				Parent = column,
 				Padding = dim(0, 4),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			})
+
+			local function update_column_height()
+				column.Size = dim2(1, 0, 0, max(column_layout.AbsoluteContentSize.Y, holder.AbsoluteSize.Y))
+			end
+			library:connection(column_layout:GetPropertyChangedSignal("AbsoluteContentSize"), update_column_height)
+			library:connection(holder:GetPropertyChangedSignal("AbsoluteSize"), update_column_height)
+			task.defer(update_column_height)
 
 			cfg["holder"] = column
 
@@ -4559,7 +4567,9 @@
 				Parent = self.holder,
 				Name = "",
 				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 1, 0),
+				-- A tabbed multi-section is intentionally a substantial groupbox and
+				-- keeps its own inner scrolling area.
+				Size = dim2(1, 0, 0, options.height or 360),
 				BorderSizePixel = 0,
 				BackgroundColor3 = themes.preset.inline
 			}) library:apply_theme(section, "inline", "BackgroundColor3")
@@ -4898,13 +4908,12 @@
 				PaddingBottom = dim(0, 10)
 			})
 
-			-- Fit normal groupboxes to their controls. Large groups stop growing at
-			-- 360 px and use their existing inner ScrollingFrame, while the outer
-			-- column scrolls between groupboxes. This avoids both crushed boxes and
-			-- a single enormous group consuming the whole tab.
+			-- Normal groupboxes expand to all of their controls. Scrolling is owned
+			-- by the tab itself, producing one scrollbar at the far-right edge rather
+			-- than another scrollbar inside every large groupbox.
 			local function update_section_height()
 				local content_height = element_layout.AbsoluteContentSize.Y
-				section.Size = dim2(1, 0, 0, clamp(content_height + 32, 82, 360))
+				section.Size = dim2(1, 0, 0, max(content_height + 32, 82))
 			end
 			library:connection(element_layout:GetPropertyChangedSignal("AbsoluteContentSize"), update_section_height)
 			task.defer(update_section_height)
