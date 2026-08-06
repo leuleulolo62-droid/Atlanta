@@ -4505,15 +4505,18 @@
 			local cfg = {}
 
 			local holder = path or self.holder
+			local reorderable = options and options.reorderable == true
 
-			-- Columns contain content but do not scroll independently. Their height
-			-- follows their sections; the parent tab canvas provides the sole scrollbar.
+			-- Main-tab columns are content-height children of the tab's one shared
+			-- scroller. Standalone panels (Style, Configurations, Music, Preview,
+			-- Playerlist) keep their original full-height/flex layout so they cannot
+			-- overflow or collapse after the main-tab scrolling improvement.
 			local column = library:create("Frame", {
 				Parent = holder,
 				BackgroundTransparency = 1,
 				Name = "\0",
 				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 0, 0),
+				Size = reorderable and dim2(1, 0, 0, 0) or dim2(1, 0, 1, 0),
 				BorderSizePixel = 0,
 				BackgroundColor3 = themes.preset.inline,
 			}) library:apply_theme(column, "inline", "BackgroundColor3")
@@ -4523,13 +4526,16 @@
 				Padding = dim(0, 4),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			})
+			if not reorderable then column_layout.VerticalFlex = Enum.UIFlexAlignment.Fill end
 
-			local function update_column_height()
-				column.Size = dim2(1, 0, 0, max(column_layout.AbsoluteContentSize.Y, holder.AbsoluteSize.Y))
+			if reorderable then
+				local function update_column_height()
+					column.Size = dim2(1, 0, 0, max(column_layout.AbsoluteContentSize.Y, holder.AbsoluteSize.Y))
+				end
+				library:connection(column_layout:GetPropertyChangedSignal("AbsoluteContentSize"), update_column_height)
+				library:connection(holder:GetPropertyChangedSignal("AbsoluteSize"), update_column_height)
+				task.defer(update_column_height)
 			end
-			library:connection(column_layout:GetPropertyChangedSignal("AbsoluteContentSize"), update_column_height)
-			library:connection(holder:GetPropertyChangedSignal("AbsoluteSize"), update_column_height)
-			task.defer(update_column_height)
 
 			cfg["holder"] = column
 
@@ -4569,7 +4575,7 @@
 				BorderColor3 = rgb(0, 0, 0),
 				-- A tabbed multi-section is intentionally a substantial groupbox and
 				-- keeps its own inner scrolling area.
-				Size = dim2(1, 0, 0, options.height or 360),
+				Size = self.reorderable and dim2(1, 0, 0, options.height or 360) or dim2(1, 0, 1, 0),
 				BorderSizePixel = 0,
 				BackgroundColor3 = themes.preset.inline
 			}) library:apply_theme(section, "inline", "BackgroundColor3")
@@ -4786,9 +4792,9 @@
 				Parent = self.holder,
 				Name = "\0",
 				BorderColor3 = rgb(0, 0, 0),
-				-- Updated from its controls below; this initial size prevents a
-				-- one-frame collapsed groupbox while the controls are being created.
-				Size = dim2(1, 0, 0, 82),
+				-- Main-tab groups become content-height; standalone panel sections keep
+				-- their original full-height sizing and are managed by column flex.
+				Size = self.reorderable and dim2(1, 0, 0, 82) or dim2(1, 0, 1, 0),
 				BorderSizePixel = 0,
 				BackgroundColor3 = themes.preset.inline
 			}) library:apply_theme(section, "inline", "BackgroundColor3") 
@@ -4908,15 +4914,16 @@
 				PaddingBottom = dim(0, 10)
 			})
 
-			-- Normal groupboxes expand to all of their controls. Scrolling is owned
-			-- by the tab itself, producing one scrollbar at the far-right edge rather
-			-- than another scrollbar inside every large groupbox.
-			local function update_section_height()
-				local content_height = element_layout.AbsoluteContentSize.Y
-				section.Size = dim2(1, 0, 0, max(content_height + 32, 82))
+			-- Normal main-tab groupboxes expand to all controls; the tab owns the
+			-- sole far-right scrollbar. Standalone panels deliberately skip this.
+			if self.reorderable then
+				local function update_section_height()
+					local content_height = element_layout.AbsoluteContentSize.Y
+					section.Size = dim2(1, 0, 0, max(content_height + 32, 82))
+				end
+				library:connection(element_layout:GetPropertyChangedSignal("AbsoluteContentSize"), update_section_height)
+				task.defer(update_section_height)
 			end
-			library:connection(element_layout:GetPropertyChangedSignal("AbsoluteContentSize"), update_section_height)
-			task.defer(update_section_height)
 
 			-- Drag-to-reorder, opt-in per column (see library:column). The
 			-- indicator's position is driven by LayoutOrder (half-steps between
@@ -5089,11 +5096,13 @@
 					Text = "",
 					Name = "slider",
 					ZIndex = 1,
-					Size = dim2(1, -8, 0, 12),
+					-- Reserve the real label + track height. The old 12px automatic holder
+					-- contained a zero-height child, so layouts measured only the label and
+					-- allowed the visible track to overlap the following control.
+					Size = dim2(1, -8, 0, cfg.name and 30 or 15),
 					BorderSizePixel = 0,
 					BackgroundTransparency = 1,
 					TextXAlignment = Enum.TextXAlignment.Left,
-					AutomaticSize = Enum.AutomaticSize.Y,
 					TextYAlignment = Enum.TextYAlignment.Top,
 					TextSize = 12,
 					BackgroundColor3 = rgb(255, 255, 255)
@@ -5140,17 +5149,18 @@
 					Name = "bottom_components",
 					Position = dim2(0, 0, 0, cfg.name and 15 or 0),
 					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 0, 0),
+					Size = dim2(1, 0, 0, 14),
 					BorderSizePixel = 0,
+					BackgroundTransparency = 1,
 					BackgroundColor3 = rgb(255, 255, 255)
 				})
 				
 				local slider = library:create("TextButton", {
 					Parent = bottom_components,
 					Name = "slider",
-					Position = dim2(0, 0, 0, 2),
+					Position = dim2(0, 0, 0, 1),
 					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -1, 1, 12),
+					Size = dim2(1, -1, 0, 12),
 					BorderSizePixel = 0,
 					BackgroundColor3 = themes.preset.outline,
 					Text = "",
@@ -5257,7 +5267,9 @@
 
 				cfg.value = math.clamp(library:round(value, cfg.intervals), cfg.min, cfg.max)
 
-				local fill_size = dim2((cfg.value - cfg.min) / (cfg.max - cfg.min), 0, 1, 0)
+				local range = cfg.max - cfg.min
+				local ratio = range ~= 0 and math.clamp((cfg.value - cfg.min) / range, 0, 1) or 0
+				local fill_size = dim2(ratio, 0, 1, 0)
 				if cfg.dragging then
 					fill.Size = fill_size
 				else
@@ -5292,8 +5304,12 @@
 					end 
 				end)
 
-				slider.MouseButton1Down:Connect(function()
+				slider.MouseButton1Down:Connect(function(x)
 					cfg.dragging = true
+					if slider.AbsoluteSize.X > 0 then
+						local value = ((cfg.max - cfg.min) * math.clamp((x - slider.AbsolutePosition.X) / slider.AbsoluteSize.X, 0, 1)) + cfg.min
+						cfg.set(value)
+					end
 				end)
 			end
 
