@@ -3487,8 +3487,9 @@
 						Name = "\0";
 						Size = dim2(0, 24, 0, 14);
 						BackgroundTransparency = 1;
-						AnchorPoint = vec2(1, 0);
-						Position = dim2(0, -5, 0, -16);
+						AnchorPoint = vec2(1, 0.5);
+						-- Its right edge sits left of the bar (bar spans roughly -9..-5).
+						Position = dim2(0, -12, 0, 7);
 						BorderSizePixel = 0;
 						TextSize = 12;
 					});
@@ -3545,6 +3546,9 @@
 				objects[ "healthbar" ].Position = UDim2.new(0, 1, 1 - multiplier, 1)
 				objects[ "healthbar" ].BackgroundColor3 = color
 				objects[ "health_text" ].Text = tostring(math.floor(multiplier * humanoid.MaxHealth))
+				-- Follow the top of the filled health amount while remaining completely
+				-- beside the bar instead of overlapping it.
+				objects[ "health_text" ].Position = UDim2.new(0, -12, math.clamp(1 - multiplier, 0, 1), 7)
 			end
 
 			function cfg.refresh_elements( )
@@ -4443,6 +4447,7 @@
 					BackgroundTransparency = 1,
 					Name = "\0",
 					BorderColor3 = rgb(0, 0, 0),
+					-- Keep the one shared scrollbar on the absolute far-right edge.
 					Size = dim2(1, 0, 1, 0),
 					BorderSizePixel = 0,
 					Visible = false,
@@ -4456,6 +4461,14 @@
 				}) library:apply_theme(section_holder, "accent", "ScrollBarImageColor3")
 			
 				cfg["holder"] = section_holder
+
+				-- Reserve content space inside the shared scroller, without moving its
+				-- scrollbar. Horizontal Fill then assigns exactly equal usable width to
+				-- the left and right main-tab columns across every script tab.
+				library:create("UIPadding", {
+					Parent = section_holder,
+					PaddingRight = dim(0, 4),
+				})
 
 				library:create("UIListLayout", {
 					Parent = section_holder,
