@@ -3663,7 +3663,7 @@
 				elseif style == "Bloom" then fill_t = 0.6; outline_t = 0
 				elseif style == "Black Mat" then chams_color = rgb(0, 0, 0)
 				elseif style == "Thermal" then chams_color = rgb(255, 40, 0); fill_t = 0.15
-				elseif style == "Gradient" then chams_color = fcolor("Chams_Grad_Color1", chams_color)
+				elseif style == "Gradient" or style == "Gradient Chams" then chams_color = fcolor("Chams_Grad_Color1", chams_color)
 				end
 				chams_highlight.Enabled = chams_on
 				chams_highlight.FillColor = chams_color
