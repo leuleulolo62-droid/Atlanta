@@ -3817,6 +3817,31 @@
 				TextSize = 11
 			}) library:apply_theme(time_label, "text", "TextColor3")
 
+			-- Audio visualizer panel. Roblox assets use PlaybackLoudness; Spotify uses
+			-- the live Windows output peak streamed by the local bridge's /level endpoint.
+			local visualizer_outline = library:create("Frame", {
+				Parent = holder, Name = "", Position = dim2(0, 72, 0, 63),
+				Size = dim2(1, -72, 0, 24), BorderSizePixel = 0,
+				BackgroundColor3 = themes.preset.outline,
+			}) library:apply_theme(visualizer_outline, "outline", "BackgroundColor3")
+			local visualizer = library:create("Frame", {
+				Parent = visualizer_outline, Name = "", Position = dim2(0, 1, 0, 1),
+				Size = dim2(1, -2, 1, -2), BorderSizePixel = 0,
+				ClipsDescendants = true, BackgroundColor3 = themes.preset.low_contrast,
+			}) library:apply_theme(visualizer, "low_contrast", "BackgroundColor3")
+			local visualizer_bars = {}
+			local visualizer_bar_count = 18
+			for index = 1, visualizer_bar_count do
+				local bar = library:create("Frame", {
+					Parent = visualizer, Name = "", AnchorPoint = vec2(0, 1),
+					Position = dim2((index - 1) / visualizer_bar_count, 1, 1, -1),
+					Size = dim2(1 / visualizer_bar_count, -2, 0, 1), BorderSizePixel = 0,
+					BackgroundColor3 = themes.preset.accent,
+				}) library:apply_theme(bar, "accent", "BackgroundColor3")
+				visualizer_bars[index] = bar
+			end
+			cfg.spotify_audio_level = 0
+
 			local function fmt_time(t)
 				if not t or t <= 0 then return "0:00" end
 				local m = math.floor(t / 60)
@@ -3848,13 +3873,37 @@
 			library._music_get_timeline = current_timeline
 
 			-- The normal player and Spotify Sync use the same display values.
-			library:connection(run.Heartbeat, function()
+			local visualizer_level, visualizer_phase, music_timeline_elapsed = 0, 0, 0
+			library:connection(run.Heartbeat, function(dt)
+				dt = dt or 0.016
+				music_timeline_elapsed += dt
+				if music_timeline_elapsed < (1 / 30) then return end
+				dt = music_timeline_elapsed
+				music_timeline_elapsed = 0
 				local pos, len = current_timeline()
 				time_label.Text = fmt_time(pos) .. " / " .. fmt_time(len)
 				if len > 0 then
 					progress_fill.Size = dim2(math.clamp(pos / len, 0, 1), 0, 1, 0)
 				else
 					progress_fill.Size = dim2(0, 0, 1, 0)
+				end
+
+				local raw_level = 0
+				if cfg.spotify_on then
+					raw_level = tonumber(cfg.spotify_audio_level) or 0
+				elseif cfg.sound and cfg.sound.IsPlaying then
+					raw_level = math.clamp((tonumber(cfg.sound.PlaybackLoudness) or 0) / 650, 0, 1)
+				end
+				local target = math.clamp(math.sqrt(math.max(raw_level, 0)) * 1.55, 0, 1)
+				local response = target > visualizer_level and math.min(1, dt * 18) or math.min(1, dt * 7)
+				visualizer_level += (target - visualizer_level) * response
+				visualizer_phase += dt * (5 + visualizer_level * 9)
+				for index, bar in ipairs(visualizer_bars) do
+					local wave = 0.58 + 0.22 * math.sin(visualizer_phase + index * 0.82)
+						+ 0.20 * math.sin(visualizer_phase * 0.47 - index * 1.31)
+					local centre = 1 - math.abs((index - (visualizer_bar_count + 1) / 2) / (visualizer_bar_count / 2))
+					local height = visualizer_level > 0.01 and math.clamp(visualizer_level * (wave + centre * 0.22), 0.06, 1) or 0.04
+					bar.Size = dim2(1 / visualizer_bar_count, -2, height, 0)
 				end
 			end)
 
@@ -4017,7 +4066,7 @@
 						albumArt = tostring(decoded.albumArt or ""), isPlaying = decoded.isPlaying == true,
 						isAd = decoded.isAd == true,
 						positionMs = tonumber(decoded.positionMs) or 0, durationMs = tonumber(decoded.durationMs) or 0,
-						sampledAt = tonumber(decoded.sampledAt) or 0,
+						audioLevel = tonumber(decoded.audioLevel) or 0, sampledAt = tonumber(decoded.sampledAt) or 0,
 						error = decoded.error == true,
 					}
 				end
@@ -4036,6 +4085,7 @@
 					error = has_error,
 					positionMs = tonumber(body:match('"positionMs":(%d+)')) or 0,
 					durationMs = tonumber(body:match('"durationMs":(%d+)')) or 0,
+					audioLevel = tonumber(body:match('"audioLevel":([%d%.]+)')) or 0,
 					sampledAt = tonumber(body:match('"sampledAt":(%d+)')) or 0,
 				}
 			end
@@ -4095,8 +4145,8 @@
 				end
 			end
 
-			local function spotify_poll()
-				while cfg.spotify_on do
+			local function spotify_poll(generation)
+				while cfg.spotify_on and generation == cfg.spotify_generation do
 					local body = spotify_http("/")
 					if body then
 						local track = spotify_parse(body)
@@ -4138,6 +4188,19 @@
 				end
 			end
 
+			local function spotify_level_poll(generation)
+				while cfg.spotify_on and generation == cfg.spotify_generation do
+					local body = spotify_http("/level")
+					local ok, level = pcall(function() return body and http_service:JSONDecode(body) end)
+					if ok and type(level) == "table" then
+						cfg.spotify_audio_level = math.clamp(tonumber(level.audioLevel) or 0, 0, 1)
+					else
+						cfg.spotify_audio_level = 0
+					end
+					task.wait(0.08)
+				end
+			end
+
 			-- SPOTIFY AUTO SYNC. This used to be two buttons (Spotify Sync / Disable
 			-- Spotify Sync) with no persistence at all -- every single script run
 			-- needed a fresh manual click before sync would start. Replaced with one
@@ -4168,6 +4231,8 @@
 			end
 
 			local function spotify_set_enabled(bool)
+				cfg.spotify_generation = (cfg.spotify_generation or 0) + 1
+				local generation = cfg.spotify_generation
 				cfg.spotify_on = bool
 				if bool then
 					library._spotify_active = true
@@ -4175,13 +4240,15 @@
 					-- Do not leave an old Roblox asset playing underneath Spotify.
 					pcall(function() cfg.sound:Pause() end)
 					library:notification({text = "Spotify sync started - polling 127.0.0.1:3000", time = 3})
-					task.spawn(spotify_poll)
+					task.spawn(function() spotify_poll(generation) end)
+					task.spawn(function() spotify_level_poll(generation) end)
 				else
 					-- The poll loop tests cfg.spotify_on on every pass, so clearing it here
 					-- immediately disconnects the in-game player from the local bridge --
 					-- same effect the old dedicated "Disable" button had, now just "turn
 					-- the toggle off" instead of a second, easy-to-forget button.
 					library._spotify_active = false
+					cfg.spotify_audio_level = 0
 					cfg.spotify_track = nil
 					library._spotify_track = nil
 					title.Text = "Spotify sync stopped"
