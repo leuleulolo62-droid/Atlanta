@@ -3978,19 +3978,29 @@
 			-- SPOTIFY INTEGRATION: polls local server, fetches album art, falls back to Roblox asset mode
 			cfg.spotify_last_song = ""
 
-			local function spotify_http(url)
+			local function spotify_http(path)
 				local env = getgenv and getgenv() or {}
 				local fn = (typeof(env.request) == "function" and env.request)
 					or (typeof(env.http_request) == "function" and env.http_request)
 					or (env.syn and env.syn.request)
-				if fn then
-					local ok, res = pcall(fn, {Url = url, Method = "GET"})
-					if ok and res and res.Body then return res.Body end
+				if not fn then return nil end
+
+				path = tostring(path or "")
+				if path ~= "" and path:sub(1, 1) ~= "/" then path = "/" .. path end
+				-- Some executors resolve localhost through a proxy while others reject the
+				-- numeric loopback address. Try both and accept the common response shapes.
+				for _, host in ipairs({"http://127.0.0.1:3000", "http://localhost:3000"}) do
+					local ok, res = pcall(fn, {Url = host .. path, Method = "GET", Timeout = 5})
+					if ok and res then
+						local body = res.Body or res.body
+						local status = tonumber(res.StatusCode or res.Status or res.status_code) or 200
+						if body and status >= 200 and status < 300 then return body end
+					end
 				end
 				return nil
 			end
 			cfg.spotify_request = function(action)
-				local body = spotify_http("http://localhost:3000/control/" .. tostring(action))
+				local body = spotify_http("/control/" .. tostring(action))
 				local ok, result = pcall(function() return body and http_service:JSONDecode(body) end)
 				if not (ok and result and result.ok) then
 					local message = result and result.error or ("Spotify " .. tostring(action) .. " failed")
@@ -4065,7 +4075,7 @@
 			local function spotify_update_display(track)
 				if track.error then
 					title.Text = "Spotify: Server Offline"
-					subtitle.Text = "Run spotify_server.js"
+					subtitle.Text = "Run spotify_server_simple.js"
 					art.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
 					return
 				end
@@ -4087,7 +4097,7 @@
 
 			local function spotify_poll()
 				while cfg.spotify_on do
-					local body = spotify_http("http://localhost:3000")
+					local body = spotify_http("/")
 					if body then
 						local track = spotify_parse(body)
 						if track then
@@ -4119,7 +4129,7 @@
 						if cfg.spotify_last_song ~= "__offline" then
 							cfg.spotify_last_song = "__offline"
 							title.Text = "Spotify: Server Offline"
-							subtitle.Text = "Run spotify_server.js on your PC"
+							subtitle.Text = "Run spotify_server_simple.js on your PC"
 							art.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
 						end
 						if library._music_overlay_update then library._music_overlay_update() end
@@ -4149,11 +4159,12 @@
 			local function spotify_autosync_read()
 				if type(isfile) == "function" then
 					local ok, exists = pcall(isfile, autosync_path)
-					if not ok or not exists then return false end
+					if not ok or not exists then return nil end
 				end
-				if type(readfile) ~= "function" then return false end
+				if type(readfile) ~= "function" then return nil end
 				local ok, body = pcall(readfile, autosync_path)
-				return ok and body == "1"
+				if not ok then return nil end
+				return body == "1"
 			end
 
 			local function spotify_set_enabled(bool)
@@ -4163,7 +4174,7 @@
 					cfg.spotify_last_song = ""
 					-- Do not leave an old Roblox asset playing underneath Spotify.
 					pcall(function() cfg.sound:Pause() end)
-					library:notification({text = "Spotify sync started - polling localhost:3000", time = 3})
+					library:notification({text = "Spotify sync started - polling 127.0.0.1:3000", time = 3})
 					task.spawn(spotify_poll)
 				else
 					-- The poll loop tests cfg.spotify_on on every pass, so clearing it here
@@ -4182,20 +4193,12 @@
 			end
 
 			self:button_holder({})
-			local spotify_toggle = self:toggle({name = "Spotify Auto Sync", flag = "spotify_auto_sync", default = false, callback = function(bool)
+			local remembered_autosync = spotify_autosync_read()
+			-- Connect automatically on first use, while still respecting a previous
+			-- explicit OFF choice saved by the user.
+			self:toggle({name = "Spotify Auto Sync", flag = "spotify_auto_sync", default = remembered_autosync ~= false, callback = function(bool)
 				spotify_set_enabled(bool)
 			end})
-
-			-- Auto-restore: if it was on the last time this script ran, turn it back on
-			-- right now -- through the toggle's own .set so the checkbox visually shows
-			-- ON too, not just the underlying sync state. Deferred one frame so the panel
-			-- has finished laying out first.
-			if spotify_autosync_read() and spotify_toggle and spotify_toggle.set then
-				task.spawn(function()
-					task.wait()
-					spotify_toggle.set(true)
-				end)
-			end
 
 			return setmetatable(cfg, library)
 		end
