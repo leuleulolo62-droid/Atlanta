@@ -3842,6 +3842,7 @@
 			end
 			cfg.spotify_audio_level = 0
 			cfg.spotify_audio_levels = {}
+			cfg.visualizer_sensitivity = 1.35
 
 			local function fmt_time(t)
 				if not t or t <= 0 then return "0:00" end
@@ -3907,7 +3908,7 @@
 				for index, bar in ipairs(visualizer_bars) do
 					local sample_index = #samples - visualizer_bar_count + index
 					local raw = sample_index > 0 and (tonumber(samples[sample_index]) or 0) or 0
-					local target = raw > 0.0001 and math.clamp((raw ^ 0.45) * 1.35, 0.04, 1) or 0.04
+					local target = raw > 0.0001 and math.clamp((raw ^ 0.45) * cfg.visualizer_sensitivity, 0.04, 1) or 0.04
 					local current = visualizer_levels[index] or 0.04
 					local response = target > current and math.min(1, dt * 26) or math.min(1, dt * 15)
 					current += (target - current) * response
@@ -3943,18 +3944,26 @@
 			self:slider({name = "Volume", flag = "music_volume", min = 0, max = 100, default = math.floor((options.volume or 0.5) * 100), suffix = "%", callback = function(value)
 				cfg.sound.Volume = value / 100
 				if cfg.spotify_on and cfg.spotify_request then
-					-- Sliders fire continuously while dragged. Send only the final stable
-					-- value so the bridge does not launch a Windows audio-session call for
-					-- every pixel of movement.
-					cfg.spotify_volume_generation = (cfg.spotify_volume_generation or 0) + 1
-					local generation = cfg.spotify_volume_generation
-					task.spawn(function()
-						task.wait(0.2)
-						if cfg.spotify_on and generation == cfg.spotify_volume_generation then
-							cfg.spotify_request("volume?value=" .. tostring(math.floor(value + 0.5)))
-						end
-					end)
+					-- Keep only the newest drag value and send at a bounded rate. The persistent
+					-- bridge helper applies each update quickly without spawning PowerShell again.
+					cfg.spotify_pending_volume = math.floor(value + 0.5)
+					if not cfg.spotify_volume_worker then
+						cfg.spotify_volume_worker = true
+						task.spawn(function()
+							while cfg.spotify_on and cfg.spotify_pending_volume ~= nil do
+								local pending = cfg.spotify_pending_volume
+								cfg.spotify_pending_volume = nil
+								cfg.spotify_request("volume?value=" .. tostring(pending))
+								task.wait(0.08)
+							end
+							cfg.spotify_volume_worker = false
+						end)
+					end
 				end
+			end})
+
+			self:slider({name = "Visualizer Sensitivity", flag = "music_visualizer_sensitivity", min = 25, max = 300, default = 135, suffix = "%", callback = function(value)
+				cfg.visualizer_sensitivity = math.clamp((tonumber(value) or 135) / 100, 0.25, 3)
 			end})
 
 			self:textbox({placeholder = "Paste rbxassetid or library link...", flag = input_flag})
