@@ -3841,6 +3841,7 @@
 				visualizer_bars[index] = bar
 			end
 			cfg.spotify_audio_level = 0
+			cfg.spotify_audio_levels = {}
 
 			local function fmt_time(t)
 				if not t or t <= 0 then return "0:00" end
@@ -3873,7 +3874,8 @@
 			library._music_get_timeline = current_timeline
 
 			-- The normal player and Spotify Sync use the same display values.
-			local visualizer_level, visualizer_phase, music_timeline_elapsed = 0, 0, 0
+			local visualizer_levels, local_audio_history = {}, {}
+			local local_history_elapsed, music_timeline_elapsed = 0, 0
 			library:connection(run.Heartbeat, function(dt)
 				dt = dt or 0.016
 				music_timeline_elapsed += dt
@@ -3888,22 +3890,29 @@
 					progress_fill.Size = dim2(0, 0, 1, 0)
 				end
 
-				local raw_level = 0
+				local samples
 				if cfg.spotify_on then
-					raw_level = tonumber(cfg.spotify_audio_level) or 0
-				elseif cfg.sound and cfg.sound.IsPlaying then
-					raw_level = math.clamp((tonumber(cfg.sound.PlaybackLoudness) or 0) / 650, 0, 1)
+					samples = cfg.spotify_audio_levels or {}
+				else
+					local_history_elapsed += dt
+					if local_history_elapsed >= 0.05 then
+						local_history_elapsed = 0
+						local raw = cfg.sound and cfg.sound.IsPlaying
+							and math.clamp((tonumber(cfg.sound.PlaybackLoudness) or 0) / 650, 0, 1) or 0
+						table.insert(local_audio_history, raw)
+						if #local_audio_history > visualizer_bar_count then table.remove(local_audio_history, 1) end
+					end
+					samples = local_audio_history
 				end
-				local target = math.clamp(math.sqrt(math.max(raw_level, 0)) * 1.55, 0, 1)
-				local response = target > visualizer_level and math.min(1, dt * 18) or math.min(1, dt * 7)
-				visualizer_level += (target - visualizer_level) * response
-				visualizer_phase += dt * (5 + visualizer_level * 9)
 				for index, bar in ipairs(visualizer_bars) do
-					local wave = 0.58 + 0.22 * math.sin(visualizer_phase + index * 0.82)
-						+ 0.20 * math.sin(visualizer_phase * 0.47 - index * 1.31)
-					local centre = 1 - math.abs((index - (visualizer_bar_count + 1) / 2) / (visualizer_bar_count / 2))
-					local height = visualizer_level > 0.01 and math.clamp(visualizer_level * (wave + centre * 0.22), 0.06, 1) or 0.04
-					bar.Size = dim2(1 / visualizer_bar_count, -2, height, 0)
+					local sample_index = #samples - visualizer_bar_count + index
+					local raw = sample_index > 0 and (tonumber(samples[sample_index]) or 0) or 0
+					local target = raw > 0.0001 and math.clamp((raw ^ 0.45) * 1.35, 0.04, 1) or 0.04
+					local current = visualizer_levels[index] or 0.04
+					local response = target > current and math.min(1, dt * 26) or math.min(1, dt * 15)
+					current += (target - current) * response
+					visualizer_levels[index] = current
+					bar.Size = dim2(1 / visualizer_bar_count, -2, current, 0)
 				end
 			end)
 
@@ -4152,16 +4161,25 @@
 						local track = spotify_parse(body)
 						if track then
 							local now = os.clock()
-							local incoming = (track.positionMs or 0) / 1000
+							local raw_position_ms = tonumber(track.positionMs) or 0
+							local incoming = raw_position_ms / 1000
 							local previous = cfg.spotify_track
 							if previous and previous.song == track.song and previous.artist == track.artist and previous.isPlaying and track.isPlaying and previous.receivedAt then
 								local expected = ((previous.positionMs or 0) / 1000) + math.max(0, now - previous.receivedAt)
-								-- The local clock is the display clock. Bridge samples arrive on
-								-- uneven boundaries, so applying their tiny drift every second is
-								-- what made the bar stutter or reverse. Only accept a meaningful
-								-- difference as an intentional Spotify seek.
-								if math.abs(incoming - expected) < 3 then incoming = expected end
+								local previous_raw = (tonumber(previous.bridgePositionMs) or tonumber(previous.positionMs) or 0) / 1000
+								local backward_seek = incoming < previous_raw - 1.5
+								local forward_seek = incoming > previous_raw + 8
+								if not backward_seek and not forward_seek then
+									-- GSMTC often repeats one frozen position for 3-5 seconds. Never
+									-- snap back to that stale sample; absorb forward corrections gently.
+									if incoming <= expected then
+										incoming = expected
+									else
+										incoming = expected + math.min(incoming - expected, 0.5)
+									end
+								end
 							end
+							track.bridgePositionMs = raw_position_ms
 							track.positionMs = math.floor(incoming * 1000 + 0.5)
 							track.receivedAt = now
 							cfg.spotify_track = track
@@ -4194,10 +4212,18 @@
 					local ok, level = pcall(function() return body and http_service:JSONDecode(body) end)
 					if ok and type(level) == "table" then
 						cfg.spotify_audio_level = math.clamp(tonumber(level.audioLevel) or 0, 0, 1)
+						local samples = {}
+						if type(level.levels) == "table" then
+							for _, value in ipairs(level.levels) do
+								samples[#samples + 1] = math.clamp(tonumber(value) or 0, 0, 1)
+							end
+						end
+						cfg.spotify_audio_levels = samples
 					else
 						cfg.spotify_audio_level = 0
+						cfg.spotify_audio_levels = {}
 					end
-					task.wait(0.08)
+					task.wait(0.04)
 				end
 			end
 
@@ -4249,6 +4275,7 @@
 					-- the toggle off" instead of a second, easy-to-forget button.
 					library._spotify_active = false
 					cfg.spotify_audio_level = 0
+					cfg.spotify_audio_levels = {}
 					cfg.spotify_track = nil
 					library._spotify_track = nil
 					title.Text = "Spotify sync stopped"
